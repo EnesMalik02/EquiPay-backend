@@ -1,0 +1,36 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    command: uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    #depends_on:
+    #  - redis
+    develop:
+      watch:
+        - path: ./pyproject.toml
+          action: rebuild
+        - path: ./uv.lock
+          action: rebuild
+        - path: ./src
+          target: /app/src
+          action: sync
+
+#  redis:
+#    image: redis:alpine
+#    ports:
+#      - "6379:6379"
+#    volumes:
+#      - redis_data:/data
+#    healthcheck:
+#      test: ["CMD", "redis-cli", "ping"]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 5
+
+#volumes:
+#  redis_data:
