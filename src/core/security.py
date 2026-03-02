@@ -30,7 +30,7 @@ def create_refresh_token(data: dict) -> str:
 
 # --- Token Doğrulama ve Çıkarma ---
 def get_token_from_request(request: Request) -> str:
-    """Token'ı Header (Bearer) veya Cookie üzerinden alır."""
+    """Access Token'ı Header (Bearer) veya Cookie üzerinden alır."""
     # 1. Header kontrolü
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
@@ -44,6 +44,24 @@ def get_token_from_request(request: Request) -> str:
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Kimlik doğrulama bilgisi bulunamadı.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+def get_refresh_token_from_request(request: Request) -> str:
+    """Refresh Token'ı Header (Bearer) veya Cookie üzerinden alır."""
+    # 1. Header kontrolü
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        return auth_header.split(" ")[1]
+    
+    # 2. Cookie kontrolü
+    token_cookie = request.cookies.get("refresh_token")
+    if token_cookie:
+        return token_cookie
+        
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Refresh token bulunamadı.",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
