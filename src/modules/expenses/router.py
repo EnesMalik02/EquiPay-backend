@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
@@ -48,10 +48,12 @@ async def create_expense(
 )
 async def list_group_expenses(
     group_id: uuid.UUID,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await services.get_group_expenses(db, group_id)
+    return await services.get_group_expenses(db, group_id, limit=limit, offset=offset)
 
 
 @router.get("/{expense_id}", response_model=ExpenseResponse, summary="Masraf detayı")

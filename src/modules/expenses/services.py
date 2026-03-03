@@ -45,8 +45,13 @@ async def create_expense(
         db.add(split)
 
     await db.flush()
-    await db.refresh(expense)
-    return expense
+
+    result = await db.execute(
+        select(Expense)
+        .options(selectinload(Expense.splits))
+        .where(Expense.id == expense.id)
+    )
+    return result.scalar_one()
 
 
 async def get_expense_by_id(
@@ -61,13 +66,19 @@ async def get_expense_by_id(
 
 
 async def get_group_expenses(
-    db: AsyncSession, group_id: uuid.UUID
+    db: AsyncSession,
+    group_id: uuid.UUID,
+    *,
+    limit: int = 20,
+    offset: int = 0,
 ) -> list[Expense]:
     result = await db.execute(
         select(Expense)
         .options(selectinload(Expense.splits))
         .where(Expense.group_id == group_id, Expense.deleted_at.is_(None))
         .order_by(Expense.expense_date.desc())
+        .limit(limit)
+        .offset(offset)
     )
     return list(result.scalars().all())
 
@@ -93,8 +104,13 @@ async def update_expense(
     if expense_date is not None:
         expense.expense_date = expense_date
     await db.flush()
-    await db.refresh(expense)
-    return expense
+
+    result = await db.execute(
+        select(Expense)
+        .options(selectinload(Expense.splits))
+        .where(Expense.id == expense.id)
+    )
+    return result.scalar_one()
 
 
 async def soft_delete_expense(db: AsyncSession, expense: Expense) -> None:
