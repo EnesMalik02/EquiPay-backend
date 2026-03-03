@@ -44,8 +44,8 @@ def set_tokens_in_response(request: Request, response: Response, user_id: str):
 async def register(request: Request, data: UserRegisterRequest, response: Response, db: AsyncSession = Depends(get_db)):
     """Telefon numarası ve isim ile yeni bir kullanıcı kaydeder."""
     new_user = User(
+        username=data.username,
         phone=data.phone,
-        name=data.name
     )
     db.add(new_user)
     

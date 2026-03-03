@@ -1,8 +1,8 @@
 from pydantic import BaseModel
 
 class UserRegisterRequest(BaseModel):
+    username: str
     phone: str
-    name: str
 
 class UserLoginRequest(BaseModel):
     phone: str

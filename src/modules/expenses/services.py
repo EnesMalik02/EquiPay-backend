@@ -1,0 +1,102 @@
+import uuid
+from datetime import datetime, timezone
+from decimal import Decimal
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from src.modules.expenses.models import Expense, ExpenseSplit
+from src.modules.expenses.schemas import ExpenseSplitInput
+
+
+async def create_expense(
+    db: AsyncSession,
+    *,
+    group_id: uuid.UUID | None,
+    paid_by: uuid.UUID,
+    title: str,
+    amount: Decimal,
+    currency: str,
+    notes: str | None,
+    expense_date=None,
+    created_by: uuid.UUID,
+    splits: list[ExpenseSplitInput],
+) -> Expense:
+    expense = Expense(
+        group_id=group_id,
+        paid_by=paid_by,
+        title=title,
+        amount=amount,
+        currency=currency,
+        notes=notes,
+        expense_date=expense_date,
+        created_by=created_by,
+    )
+    db.add(expense)
+    await db.flush()
+
+    for s in splits:
+        split = ExpenseSplit(
+            expense_id=expense.id,
+            user_id=s.user_id,
+            owed_amount=s.owed_amount,
+        )
+        db.add(split)
+
+    await db.flush()
+    await db.refresh(expense)
+    return expense
+
+
+async def get_expense_by_id(
+    db: AsyncSession, expense_id: uuid.UUID
+) -> Expense | None:
+    result = await db.execute(
+        select(Expense)
+        .options(selectinload(Expense.splits))
+        .where(Expense.id == expense_id, Expense.deleted_at.is_(None))
+    )
+    return result.scalars().first()
+
+
+async def get_group_expenses(
+    db: AsyncSession, group_id: uuid.UUID
+) -> list[Expense]:
+    result = await db.execute(
+        select(Expense)
+        .options(selectinload(Expense.splits))
+        .where(Expense.group_id == group_id, Expense.deleted_at.is_(None))
+        .order_by(Expense.expense_date.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def update_expense(
+    db: AsyncSession,
+    expense: Expense,
+    *,
+    title: str | None = None,
+    amount: Decimal | None = None,
+    currency: str | None = None,
+    notes: str | None = None,
+    expense_date=None,
+) -> Expense:
+    if title is not None:
+        expense.title = title
+    if amount is not None:
+        expense.amount = amount
+    if currency is not None:
+        expense.currency = currency
+    if notes is not None:
+        expense.notes = notes
+    if expense_date is not None:
+        expense.expense_date = expense_date
+    await db.flush()
+    await db.refresh(expense)
+    return expense
+
+
+async def soft_delete_expense(db: AsyncSession, expense: Expense) -> None:
+    expense.deleted_at = datetime.now(timezone.utc)
+    await db.flush()

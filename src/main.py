@@ -1,9 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from src.core.database import lifespan
 from src.modules.auth.router import router as auth_router
 from src.modules.users.router import router as users_router
-from fastapi.middleware.cors import CORSMiddleware
+from src.modules.groups.router import router as groups_router
+from src.modules.expenses.router import router as expenses_router
+from src.modules.settlements.router import router as settlements_router
 
 app = FastAPI(
     title="EquiPay API",
@@ -21,6 +24,9 @@ app.add_middleware(
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
+app.include_router(groups_router, prefix="/api")
+app.include_router(expenses_router, prefix="/api")
+app.include_router(settlements_router, prefix="/api")
 
 @app.get("/", summary="Health check")
 async def health_check():
