@@ -29,7 +29,7 @@ class GroupResponse(BaseModel):
 # ── GroupMember ──
 
 class GroupMemberAdd(BaseModel):
-    user_id: uuid.UUID
+    phone: str
     role: str = "member"
 
 

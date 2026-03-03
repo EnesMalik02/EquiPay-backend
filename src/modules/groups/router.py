@@ -1,6 +1,7 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from src.core.database import get_db
 from src.core.security import get_current_user
@@ -103,7 +104,13 @@ async def add_member(
     group = await services.get_group_by_id(db, group_id)
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
-    return await services.add_member(db, group_id=group_id, user_id=data.user_id, role=data.role)
+
+    result = await db.execute(select(User).where(User.phone == data.phone, User.deleted_at.is_(None)))
+    target_user = result.scalars().first()
+    if not target_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bu telefon numarasına kayıtlı kullanıcı bulunamadı.")
+
+    return await services.add_member(db, group_id=group_id, user_id=target_user.id, role=data.role)
 
 
 @router.get(
