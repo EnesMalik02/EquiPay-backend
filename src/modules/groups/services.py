@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.modules.groups.models import Group, GroupMember
 
@@ -91,7 +92,9 @@ async def get_group_members(
     db: AsyncSession, group_id: uuid.UUID
 ) -> list[GroupMember]:
     result = await db.execute(
-        select(GroupMember).where(
+        select(GroupMember)
+        .options(selectinload(GroupMember.user))
+        .where(
             GroupMember.group_id == group_id,
             GroupMember.left_at.is_(None),
         )

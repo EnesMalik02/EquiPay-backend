@@ -72,3 +72,10 @@ class GroupMember(Base):
     # ── relationships ──
     group = relationship("Group", back_populates="members")
     user = relationship("User", back_populates="group_memberships")
+
+    @property
+    def username(self) -> str | None:
+        try:
+            return self.user.username if self.user else None
+        except Exception:
+            return None

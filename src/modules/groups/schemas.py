@@ -40,5 +40,6 @@ class GroupMemberResponse(BaseModel):
     role: str
     joined_at: datetime | None = None
     left_at: datetime | None = None
+    username: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
