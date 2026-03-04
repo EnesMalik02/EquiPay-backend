@@ -9,6 +9,8 @@ from src.modules.expenses.schemas import (
     ExpenseCreate,
     ExpenseUpdate,
     ExpenseResponse,
+    ExpenseSplitPayRequest,
+    ExpenseSplitResponse,
 )
 from src.modules.expenses import services
 
@@ -103,3 +105,23 @@ async def delete_expense(
     if expense.created_by != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca masrafı oluşturan silebilir.")
     await services.soft_delete_expense(db, expense)
+
+
+@router.patch(
+    "/{expense_id}/splits/{split_id}/pay",
+    response_model=ExpenseSplitResponse,
+    summary="Split'i ödenmiş olarak işaretle",
+)
+async def pay_split(
+    expense_id: uuid.UUID,
+    split_id: uuid.UUID,
+    data: ExpenseSplitPayRequest = ExpenseSplitPayRequest(),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    split = await services.get_split_by_id(db, split_id)
+    if not split or split.expense_id != expense_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Split kaydı bulunamadı.")
+    if split.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca kendi borcunuzu ödeyebilirsiniz.")
+    return await services.pay_split(db, split, paid_amount=data.paid_amount)

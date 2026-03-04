@@ -37,6 +37,11 @@ class ExpenseUpdate(BaseModel):
     expense_date: date | None = None
 
 
+class ExpenseSplitPayRequest(BaseModel):
+    paid_amount: Decimal | None = None
+    """Opsiyonel. Verilmezse owed_amount'un tamamı ödenmiş sayılır."""
+
+
 class ExpenseSplitResponse(BaseModel):
     id: uuid.UUID
     expense_id: uuid.UUID

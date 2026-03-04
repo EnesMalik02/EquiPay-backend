@@ -116,3 +116,25 @@ async def update_expense(
 async def soft_delete_expense(db: AsyncSession, expense: Expense) -> None:
     expense.deleted_at = datetime.now(timezone.utc)
     await db.flush()
+
+
+async def get_split_by_id(
+    db: AsyncSession, split_id: uuid.UUID
+) -> ExpenseSplit | None:
+    result = await db.execute(
+        select(ExpenseSplit).where(ExpenseSplit.id == split_id)
+    )
+    return result.scalars().first()
+
+
+async def pay_split(
+    db: AsyncSession,
+    split: ExpenseSplit,
+    *,
+    paid_amount: Decimal | None = None,
+) -> ExpenseSplit:
+    """paid_amount verilmezse tüm borcu ödenmiş olarak işaretler."""
+    split.paid_amount = paid_amount if paid_amount is not None else split.owed_amount
+    await db.flush()
+    await db.refresh(split)
+    return split
