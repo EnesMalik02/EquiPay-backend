@@ -20,7 +20,7 @@ class Settlement(Base):
     )
     group_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("groups.id"),
+        ForeignKey("groups.id", ondelete="SET NULL"),
         nullable=True,
     )
     payer_id: Mapped[uuid.UUID] = mapped_column(

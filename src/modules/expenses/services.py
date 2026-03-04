@@ -41,6 +41,8 @@ async def create_expense(
             expense_id=expense.id,
             user_id=s.user_id,
             owed_amount=s.owed_amount,
+            # Faturayı ödeyen kişinin kendi payı anında ödenmiş sayılır.
+            paid_amount=s.owed_amount if s.user_id == paid_by else Decimal("0"),
         )
         db.add(split)
 

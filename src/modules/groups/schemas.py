@@ -33,6 +33,10 @@ class GroupMemberAdd(BaseModel):
     role: str = "member"
 
 
+class GroupMemberRoleUpdate(BaseModel):
+    role: str
+
+
 class GroupMemberResponse(BaseModel):
     id: uuid.UUID
     group_id: uuid.UUID

@@ -11,6 +11,7 @@ from src.modules.groups.schemas import (
     GroupUpdate,
     GroupResponse,
     GroupMemberAdd,
+    GroupMemberRoleUpdate,
     GroupMemberResponse,
 )
 from src.modules.groups import services
@@ -76,12 +77,12 @@ async def update_group(
 @router.delete(
     "/{group_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Grubu kalıcı olarak sil",
+    summary="Grubu sil",
     description=(
-        "Grubu kalıcı olarak siler. "
-        "Yalnızca admin rolündeki üye yapabilir. "
-        "Gruptaki tüm bakiyelerin sıfır olması gerekir. "
-        "Bu işlem geri alınamaz."
+        "Grubu siler (deleted_at doldurulur). "
+        "Yalnızca admin yapabilir. "
+        "Gruptaki tüm bakiyeler sıfır olmalıdır. "
+        "expenses / settlements verileri olduğu gibi kalır."
     ),
 )
 async def delete_group(
@@ -100,7 +101,7 @@ async def delete_group(
             detail="Yalnızca admin rolündeki üye grubu silebilir.",
         )
     try:
-        await services.hard_delete_group(db, group)
+        await services.delete_group(db, group)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
@@ -112,10 +113,10 @@ async def delete_group(
     status_code=status.HTTP_200_OK,
     summary="Gruptan çık",
     description=(
-        "Mevcut kullanıcıyı gruptan çıkarır. "
-        "Gruptan çıkabilmek için bakiyenizin sıfır olması gerekir "
-        "(kimseye borcunuz ya da alacağınız kalmamış olmalı). "
-        "Çıktıktan sonra eski harcamalarda 'Eski Üye' olarak görünürsünüz."
+        "Kullanıcıyı gruptan çıkarır. "
+        "Açık borç/alacak varsa 409 döner. "
+        "Admin ise ve başka üye varsa önce admin ataması gerekir (409). "
+        "Admin ise ve son üyeyse grup soft-delete edilir."
     ),
 )
 async def leave_group(
@@ -127,23 +128,51 @@ async def leave_group(
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
 
-    if group.created_by == current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "Grubun kurucusu gruptan çıkamaz. "
-                "Önce başka bir üyeyi admin yapın ya da grubu silin."
-            ),
-        )
-
     try:
-        await services.leave_group(db, group, user_id=current_user.id)
+        result = await services.leave_group(db, group, user_id=current_user.id)
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
+    if result["action"] == "group_deleted":
+        return {"detail": "Son üyesiniz; grup silindi."}
     return {"detail": "Gruptan başarıyla çıkıldı."}
+
+
+# ── Member Role ──────────────────────────────────────────────────────────
+
+@router.patch(
+    "/{group_id}/members/{user_id}/role",
+    response_model=GroupMemberResponse,
+    summary="Üye rolünü güncelle",
+    description="Yalnızca admin başka bir üyenin rolünü değiştirebilir.",
+)
+async def update_member_role(
+    group_id: uuid.UUID,
+    user_id: uuid.UUID,
+    data: GroupMemberRoleUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    group = await services.get_group_by_id(db, group_id)
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
+
+    requester = await services.get_member(db, group_id, current_user.id)
+    if not requester or requester.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Yalnızca admin rol değişikliği yapabilir.",
+        )
+
+    target = await services.get_member(db, group_id, user_id)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Üye bulunamadı.")
+
+    return await services.update_member_role(db, target, role=data.role)
 
 
 # ── Group Members ──
@@ -169,7 +198,10 @@ async def add_member(
     if not target_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bu telefon numarasına kayıtlı kullanıcı bulunamadı.")
 
-    return await services.add_member(db, group_id=group_id, user_id=target_user.id, role=data.role)
+    try:
+        return await services.add_member(db, group_id=group_id, user_id=target_user.id, role=data.role)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
 @router.get(
