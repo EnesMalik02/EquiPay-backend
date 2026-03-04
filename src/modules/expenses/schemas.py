@@ -62,9 +62,7 @@ class ExpenseResponse(BaseModel):
     currency: str
     notes: str | None = None
     expense_date: date | None = None
-    created_by: uuid.UUID
     created_at: datetime | None = None
     updated_at: datetime | None = None
-    splits: list[ExpenseSplitResponse] = []
 
     model_config = ConfigDict(from_attributes=True)

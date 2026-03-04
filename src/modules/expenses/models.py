@@ -47,9 +47,6 @@ class Expense(Base):
     expense_date: Mapped[Optional[date]] = mapped_column(
         Date, server_default=text("CURRENT_DATE")
     )
-    created_by: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
-    )
     created_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
@@ -67,7 +64,7 @@ class Expense(Base):
     # ── relationships ──
     group = relationship("Group", back_populates="expenses")
     payer = relationship("User", back_populates="paid_expenses", foreign_keys=[paid_by])
-    creator = relationship("User", back_populates="created_expenses", foreign_keys=[created_by])
+
     splits = relationship("ExpenseSplit", back_populates="expense", cascade="all, delete-orphan")
 
 

@@ -37,7 +37,6 @@ async def create_expense(
         currency=data.currency,
         notes=data.notes,
         expense_date=data.expense_date,
-        created_by=current_user.id,
         splits=data.splits,
     )
     return expense
@@ -80,7 +79,7 @@ async def update_expense(
     expense = await services.get_expense_by_id(db, expense_id)
     if not expense:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Masraf bulunamadı.")
-    if expense.created_by != current_user.id:
+    if expense.paid_by != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca masrafı oluşturan güncelleyebilir.")
     return await services.update_expense(
         db,
@@ -102,7 +101,7 @@ async def delete_expense(
     expense = await services.get_expense_by_id(db, expense_id)
     if not expense:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Masraf bulunamadı.")
-    if expense.created_by != current_user.id:
+    if expense.paid_by != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca masrafı oluşturan silebilir.")
     await services.soft_delete_expense(db, expense)
 

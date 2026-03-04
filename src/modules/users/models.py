@@ -40,7 +40,6 @@ class User(Base):
     created_groups = relationship("Group", back_populates="creator", foreign_keys="Group.created_by")
     group_memberships = relationship("GroupMember", back_populates="user")
     paid_expenses = relationship("Expense", back_populates="payer", foreign_keys="Expense.paid_by")
-    created_expenses = relationship("Expense", back_populates="creator", foreign_keys="Expense.created_by")
     expense_splits = relationship("ExpenseSplit", back_populates="user")
     sent_settlements = relationship("Settlement", back_populates="payer", foreign_keys="Settlement.payer_id")
     received_settlements = relationship("Settlement", back_populates="receiver", foreign_keys="Settlement.receiver_id")

@@ -20,7 +20,6 @@ async def create_expense(
     currency: str,
     notes: str | None,
     expense_date=None,
-    created_by: uuid.UUID,
     splits: list[ExpenseSplitInput],
 ) -> Expense:
     expense = Expense(
@@ -31,7 +30,6 @@ async def create_expense(
         currency=currency,
         notes=notes,
         expense_date=expense_date,
-        created_by=created_by,
     )
     db.add(expense)
     await db.flush()
