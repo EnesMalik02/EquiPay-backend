@@ -66,3 +66,7 @@ class ExpenseResponse(BaseModel):
     updated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ExpenseDetailResponse(ExpenseResponse):
+    splits: list[ExpenseSplitResponse] = []

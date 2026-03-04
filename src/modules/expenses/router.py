@@ -9,6 +9,7 @@ from src.modules.expenses.schemas import (
     ExpenseCreate,
     ExpenseUpdate,
     ExpenseResponse,
+    ExpenseDetailResponse,
     ExpenseSplitPayRequest,
     ExpenseSplitResponse,
 )
@@ -57,7 +58,7 @@ async def list_group_expenses(
     return await services.get_group_expenses(db, group_id, limit=limit, offset=offset)
 
 
-@router.get("/{expense_id}", response_model=ExpenseResponse, summary="Masraf detayı")
+@router.get("/{expense_id}", response_model=ExpenseDetailResponse, summary="Masraf detayı")
 async def get_expense(
     expense_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
