@@ -120,3 +120,15 @@ async def refresh_token(request: Request, response: Response, db: AsyncSession =
 async def get_me(current_user: User = Depends(get_current_user)):
     """Aktif(oturum açmış) kullanıcının bilgilerini ve yetki durumunu döndürür."""
     return current_user
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, summary="Çıkış Yap")
+async def logout(request: Request, response: Response, current_user: User = Depends(get_current_user)):
+    """
+    Kullanıcıyı oturumdan çıkarır.
+    - Web istemcileri için HttpOnly cookie'leri temizler.
+    - Mobil/API istemcileri için token'ı istemci tarafında silmesi gerekir.
+    """
+    is_web = request.headers.get("x-platform") == "web"
+    if is_web:
+        response.delete_cookie("access_token")
+        response.delete_cookie("refresh_token")
