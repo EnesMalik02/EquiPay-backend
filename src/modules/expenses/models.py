@@ -64,8 +64,14 @@ class Expense(Base):
     # ── relationships ──
     group = relationship("Group", back_populates="expenses")
     payer = relationship("User", back_populates="paid_expenses", foreign_keys=[paid_by])
-
     splits = relationship("ExpenseSplit", back_populates="expense", cascade="all, delete-orphan")
+
+    @property
+    def is_fully_paid(self) -> bool:
+        """Tüm split'ler tam ödenmiş mi?"""
+        if not self.splits:
+            return False
+        return all(s.paid_amount >= s.owed_amount for s in self.splits)
 
 
 class ExpenseSplit(Base):

@@ -62,6 +62,7 @@ class ExpenseResponse(BaseModel):
     currency: str
     notes: str | None = None
     expense_date: date | None = None
+    is_fully_paid: bool
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
