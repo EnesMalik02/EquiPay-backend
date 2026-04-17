@@ -81,3 +81,7 @@ class ExpenseResponse(BaseModel):
 
 class ExpenseDetailResponse(ExpenseResponse):
     splits: list[ExpenseSplitResponse] = []
+
+
+class RecentExpenseResponse(ExpenseDetailResponse):
+    group_name: str | None = None

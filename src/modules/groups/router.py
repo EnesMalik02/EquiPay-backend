@@ -69,8 +69,9 @@ async def update_group(
     group = await services.get_group_by_id(db, group_id)
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
-    if group.created_by != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca grup sahibi güncelleyebilir.")
+    member = await services.get_member(db, group_id, current_user.id)
+    if not member or member.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca admin güncelleyebilir.")
     return await services.update_group(db, group, name=data.name, description=data.description)
 
 

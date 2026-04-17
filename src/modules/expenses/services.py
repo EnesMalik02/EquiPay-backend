@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from src.modules.expenses.models import Expense, ExpenseSplit
 from src.modules.expenses.schemas import ExpenseSplitInput
+from src.modules.groups.models import Group, GroupMember
 
 
 async def create_expense(
@@ -131,6 +132,48 @@ async def get_split_by_id(
         select(ExpenseSplit).where(ExpenseSplit.id == split_id)
     )
     return result.scalars().first()
+
+
+async def get_user_assigned_expenses(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    limit: int = 100,
+) -> list[Expense]:
+    """Kullanıcının split'i olan tüm harcamalar (ExpenseSplit üzerinden)."""
+    result = await db.execute(
+        select(Expense)
+        .join(ExpenseSplit, ExpenseSplit.expense_id == Expense.id)
+        .options(selectinload(Expense.splits), selectinload(Expense.group))
+        .where(
+            ExpenseSplit.user_id == user_id,
+            Expense.deleted_at.is_(None),
+        )
+        .order_by(Expense.expense_date.desc(), Expense.created_at.desc())
+        .limit(limit)
+    )
+    return list(result.scalars().unique().all())
+
+
+async def get_recent_user_expenses(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    limit: int = 10,
+) -> list[Expense]:
+    result = await db.execute(
+        select(Expense)
+        .join(GroupMember, GroupMember.group_id == Expense.group_id)
+        .options(selectinload(Expense.splits), selectinload(Expense.group))
+        .where(
+            GroupMember.user_id == user_id,
+            GroupMember.left_at.is_(None),
+            Expense.deleted_at.is_(None),
+        )
+        .order_by(Expense.expense_date.desc(), Expense.created_at.desc())
+        .limit(limit)
+    )
+    return list(result.scalars().unique().all())
 
 
 async def pay_split(

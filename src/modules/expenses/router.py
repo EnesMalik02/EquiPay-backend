@@ -10,6 +10,7 @@ from src.modules.expenses.schemas import (
     ExpenseUpdate,
     ExpenseResponse,
     ExpenseDetailResponse,
+    RecentExpenseResponse,
     ExpenseSplitPayRequest,
     ExpenseSplitResponse,
 )
@@ -60,6 +61,44 @@ async def list_group_expenses(
     db: AsyncSession = Depends(get_db),
 ):
     return await services.get_group_expenses(db, group_id, limit=limit, offset=offset)
+
+
+@router.get(
+    "/me/splits",
+    response_model=list[RecentExpenseResponse],
+    summary="Kullanıcının split'i olan tüm harcamalar",
+)
+async def list_my_split_expenses(
+    limit: int = Query(default=100, ge=1, le=200),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    expenses = await services.get_user_assigned_expenses(db, current_user.id, limit=limit)
+    return [
+        RecentExpenseResponse.model_validate(exp, from_attributes=True).model_copy(
+            update={"group_name": exp.group.name if exp.group else None}
+        )
+        for exp in expenses
+    ]
+
+
+@router.get(
+    "/me/recent",
+    response_model=list[RecentExpenseResponse],
+    summary="Kullanıcının son harcamaları (tüm gruplar)",
+)
+async def list_recent_my_expenses(
+    limit: int = Query(default=10, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    expenses = await services.get_recent_user_expenses(db, current_user.id, limit=limit)
+    return [
+        RecentExpenseResponse.model_validate(exp, from_attributes=True).model_copy(
+            update={"group_name": exp.group.name if exp.group else None}
+        )
+        for exp in expenses
+    ]
 
 
 @router.get("/{expense_id}", response_model=ExpenseDetailResponse, summary="Masraf detayı")
