@@ -35,6 +35,7 @@ async def create_settlement(
         receiver_id=data.receiver_id,
         amount=data.amount,
         currency=data.currency,
+        note=data.note,
     )
 
 

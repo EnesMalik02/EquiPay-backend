@@ -53,6 +53,9 @@ class Expense(Base):
     updated_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
+    split_type: Mapped[str] = mapped_column(
+        String(20), server_default=text("'equal'"), nullable=False
+    )
     deleted_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

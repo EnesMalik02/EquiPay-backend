@@ -17,8 +17,20 @@ class User(Base):
         primary_key=True,
         server_default=text("gen_random_uuid()"),
     )
-    username: Mapped[str] = mapped_column(
-        String(100), unique=True, nullable=False
+    email: Mapped[str] = mapped_column(
+        String(255), unique=True, nullable=False
+    )
+    password_hash: Mapped[str] = mapped_column(
+        String(255), nullable=False
+    )
+    display_name: Mapped[Optional[str]] = mapped_column(
+        String(150), nullable=True
+    )
+    avatar_url: Mapped[Optional[str]] = mapped_column(
+        String(500), nullable=True
+    )
+    username: Mapped[Optional[str]] = mapped_column(
+        String(100), unique=True, nullable=True
     )
     phone: Mapped[Optional[str]] = mapped_column(
         String(20), unique=True, nullable=True
@@ -43,3 +55,5 @@ class User(Base):
     expense_splits = relationship("ExpenseSplit", back_populates="user")
     sent_settlements = relationship("Settlement", back_populates="payer", foreign_keys="Settlement.payer_id")
     received_settlements = relationship("Settlement", back_populates="receiver", foreign_keys="Settlement.receiver_id")
+    sent_friend_requests = relationship("Friendship", back_populates="requester", foreign_keys="Friendship.requester_id")
+    received_friend_requests = relationship("Friendship", back_populates="addressee", foreign_keys="Friendship.addressee_id")

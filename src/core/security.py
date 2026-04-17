@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import jwt
+import bcrypt
 from typing import Optional
 from fastapi import Request, HTTPException, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +10,13 @@ import uuid
 from src.config import settings
 from src.core.database import get_db
 from src.modules.users.models import User
+
+# --- Şifre Hashleme ---
+def hash_password(raw: str) -> str:
+    return bcrypt.hashpw(raw.encode(), bcrypt.gensalt()).decode()
+
+def verify_password(raw: str, hashed: str) -> bool:
+    return bcrypt.checkpw(raw.encode(), hashed.encode())
 
 # --- Token Oluşturma ---
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:

@@ -9,6 +9,7 @@ class SettlementCreate(BaseModel):
     receiver_id: uuid.UUID
     amount: Decimal
     currency: str = "TRY"
+    note: str | None = None
 
     @field_validator("amount")
     @classmethod
@@ -30,6 +31,8 @@ class SettlementResponse(BaseModel):
     amount: Decimal
     currency: str
     status: str
+    settled_at: datetime | None = None
+    note: str | None = None
     created_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)

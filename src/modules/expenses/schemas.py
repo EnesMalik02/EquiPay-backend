@@ -3,6 +3,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, field_validator
 
+SPLIT_TYPES = {"equal", "exact", "percentage"}
+
 
 # ── Expense ──
 
@@ -19,6 +21,7 @@ class ExpenseCreate(BaseModel):
     currency: str = "TRY"
     notes: str | None = None
     expense_date: date | None = None
+    split_type: str = "equal"
     splits: list[ExpenseSplitInput]
 
     @field_validator("amount")
@@ -26,6 +29,13 @@ class ExpenseCreate(BaseModel):
     def amount_must_be_positive(cls, v: Decimal) -> Decimal:
         if v <= 0:
             raise ValueError("Tutar sıfırdan büyük olmalıdır.")
+        return v
+
+    @field_validator("split_type")
+    @classmethod
+    def split_type_must_be_valid(cls, v: str) -> str:
+        if v not in SPLIT_TYPES:
+            raise ValueError(f"split_type şunlardan biri olmalıdır: {', '.join(SPLIT_TYPES)}")
         return v
 
 
@@ -39,7 +49,6 @@ class ExpenseUpdate(BaseModel):
 
 class ExpenseSplitPayRequest(BaseModel):
     paid_amount: Decimal | None = None
-    """Opsiyonel. Verilmezse owed_amount'un tamamı ödenmiş sayılır."""
 
 
 class ExpenseSplitResponse(BaseModel):
@@ -62,6 +71,7 @@ class ExpenseResponse(BaseModel):
     currency: str
     notes: str | None = None
     expense_date: date | None = None
+    split_type: str
     is_fully_paid: bool
     created_at: datetime | None = None
     updated_at: datetime | None = None

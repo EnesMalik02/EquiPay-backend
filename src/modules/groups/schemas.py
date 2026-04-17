@@ -45,5 +45,6 @@ class GroupMemberResponse(BaseModel):
     joined_at: datetime | None = None
     left_at: datetime | None = None
     username: str | None = None
+    display_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)

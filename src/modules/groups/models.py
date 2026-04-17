@@ -79,3 +79,10 @@ class GroupMember(Base):
             return self.user.username if self.user else None
         except Exception:
             return None
+
+    @property
+    def display_name(self) -> str | None:
+        try:
+            return self.user.display_name if self.user else None
+        except Exception:
+            return None

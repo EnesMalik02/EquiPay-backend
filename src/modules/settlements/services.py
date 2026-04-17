@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -15,6 +16,7 @@ async def create_settlement(
     receiver_id: uuid.UUID,
     amount: Decimal,
     currency: str,
+    note: str | None = None,
 ) -> Settlement:
     settlement = Settlement(
         group_id=group_id,
@@ -22,6 +24,7 @@ async def create_settlement(
         receiver_id=receiver_id,
         amount=amount,
         currency=currency,
+        note=note,
     )
     db.add(settlement)
     await db.flush()
@@ -66,6 +69,8 @@ async def update_settlement_status(
     db: AsyncSession, settlement: Settlement, *, new_status: str
 ) -> Settlement:
     settlement.status = new_status
+    if new_status == "confirmed" and settlement.settled_at is None:
+        settlement.settled_at = datetime.now(timezone.utc)
     await db.flush()
     await db.refresh(settlement)
     return settlement

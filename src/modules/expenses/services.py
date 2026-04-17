@@ -20,8 +20,17 @@ async def create_expense(
     currency: str,
     notes: str | None,
     expense_date=None,
+    split_type: str = "equal",
     splits: list[ExpenseSplitInput],
 ) -> Expense:
+    split_total = sum(s.owed_amount for s in splits)
+    if abs(split_total - amount) > Decimal("0.01"):
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Paylaşım toplamı ({split_total}) ile toplam tutar ({amount}) eşleşmiyor.",
+        )
+
     expense = Expense(
         group_id=group_id,
         paid_by=paid_by,
@@ -30,6 +39,7 @@ async def create_expense(
         currency=currency,
         notes=notes,
         expense_date=expense_date,
+        split_type=split_type,
     )
     db.add(expense)
     await db.flush()

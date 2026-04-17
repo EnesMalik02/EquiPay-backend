@@ -38,6 +38,7 @@ async def create_expense(
         currency=data.currency,
         notes=data.notes,
         expense_date=data.expense_date,
+        split_type=data.split_type,
         splits=data.splits,
     )
     return expense
