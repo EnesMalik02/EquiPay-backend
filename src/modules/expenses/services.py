@@ -25,11 +25,7 @@ async def create_expense(
 ) -> Expense:
     split_total = sum(s.owed_amount for s in splits)
     if abs(split_total - amount) > Decimal("0.01"):
-        from fastapi import HTTPException, status
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Paylaşım toplamı ({split_total}) ile toplam tutar ({amount}) eşleşmiyor.",
-        )
+        raise ValueError(f"Paylaşım toplamı ({split_total}) ile toplam tutar ({amount}) eşleşmiyor.")
 
     expense = Expense(
         group_id=group_id,

@@ -23,12 +23,18 @@ async def send_friend_request(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    friendship = await services.send_request(
-        db,
-        requester_id=current_user.id,
-        addressee_email=str(data.email) if data.email else None,
-        addressee_phone=data.phone,
-    )
+    try:
+        friendship = await services.send_request(
+            db,
+            requester_id=current_user.id,
+            addressee_email=str(data.email) if data.email else None,
+            addressee_phone=data.phone,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
     return {"id": str(friendship.id), "status": friendship.status}
 
 

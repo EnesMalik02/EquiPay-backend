@@ -1,10 +1,10 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 from src.core.database import get_db
 from src.core.security import get_current_user
+from src.modules.users import services as user_services
 from src.modules.users.models import User
 from src.modules.groups.schemas import (
     GroupCreate,
@@ -194,12 +194,13 @@ async def add_member(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
 
     if data.phone:
-        result = await db.execute(select(User).where(User.phone == data.phone, User.deleted_at.is_(None)))
+        target_user = await user_services.get_by_phone(db, data.phone)
+        label = "telefon numarasına"
     else:
-        result = await db.execute(select(User).where(User.email == data.email, User.deleted_at.is_(None)))
-    target_user = result.scalars().first()
+        target_user = await user_services.get_by_email(db, data.email)
+        label = "email adresine"
+
     if not target_user:
-        label = "telefon numarasına" if data.phone else "email adresine"
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Bu {label} kayıtlı kullanıcı bulunamadı.")
 
     try:

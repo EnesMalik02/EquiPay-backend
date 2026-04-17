@@ -29,18 +29,21 @@ async def create_expense(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    expense = await services.create_expense(
-        db,
-        group_id=data.group_id,
-        paid_by=data.paid_by,
-        title=data.title,
-        amount=data.amount,
-        currency=data.currency,
-        notes=data.notes,
-        expense_date=data.expense_date,
-        split_type=data.split_type,
-        splits=data.splits,
-    )
+    try:
+        expense = await services.create_expense(
+            db,
+            group_id=data.group_id,
+            paid_by=data.paid_by,
+            title=data.title,
+            amount=data.amount,
+            currency=data.currency,
+            notes=data.notes,
+            expense_date=data.expense_date,
+            split_type=data.split_type,
+            splits=data.splits,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     return expense
 
 

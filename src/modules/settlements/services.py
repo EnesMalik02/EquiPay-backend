@@ -65,6 +65,26 @@ async def get_user_settlements(
     return list(result.scalars().all())
 
 
+_VALID_STATUSES = frozenset({"confirmed", "rejected", "cancelled"})
+
+
+def validate_status_transition(
+    settlement: Settlement, new_status: str, actor_id: uuid.UUID
+) -> None:
+    """
+    Durum geçişini doğrular.
+    Geçersizse ValueError (iş hatası) veya PermissionError (yetki hatası) fırlatır.
+    """
+    if new_status not in _VALID_STATUSES:
+        raise ValueError(f"Geçersiz durum. Geçerli durumlar: {', '.join(sorted(_VALID_STATUSES))}")
+
+    if new_status in {"confirmed", "rejected"} and settlement.receiver_id != actor_id:
+        raise PermissionError("Yalnızca alıcı bu işlemi yapabilir.")
+
+    if new_status == "cancelled" and settlement.payer_id != actor_id:
+        raise PermissionError("Yalnızca gönderen iptal edebilir.")
+
+
 async def update_settlement_status(
     db: AsyncSession, settlement: Settlement, *, new_status: str
 ) -> Settlement:

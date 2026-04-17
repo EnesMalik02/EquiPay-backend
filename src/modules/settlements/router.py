@@ -14,8 +14,6 @@ from src.modules.settlements import services
 
 router = APIRouter(prefix="/settlements", tags=["Settlements"])
 
-VALID_STATUSES = {"confirmed", "rejected", "cancelled"}
-
 
 @router.post(
     "",
@@ -87,17 +85,15 @@ async def update_settlement_status(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if data.status not in VALID_STATUSES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Geçersiz durum. Geçerli durumlar: {', '.join(VALID_STATUSES)}",
-        )
     settlement = await services.get_settlement_by_id(db, settlement_id)
     if not settlement:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ödeme kaydı bulunamadı.")
-    # Yalnızca alıcı onaylayabilir/reddedebilir, gönderen iptal edebilir
-    if data.status in {"confirmed", "rejected"} and settlement.receiver_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca alıcı bu işlemi yapabilir.")
-    if data.status == "cancelled" and settlement.payer_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca gönderen iptal edebilir.")
+
+    try:
+        services.validate_status_transition(settlement, data.status, actor_id=current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+
     return await services.update_settlement_status(db, settlement, new_status=data.status)

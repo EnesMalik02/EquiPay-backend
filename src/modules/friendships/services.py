@@ -1,9 +1,11 @@
 import uuid
+
 from sqlalchemy import select, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.modules.friendships.models import Friendship
+from src.modules.users import services as user_services
 from src.modules.users.models import User
 
 
@@ -14,25 +16,17 @@ async def send_request(
     addressee_email: str | None = None,
     addressee_phone: str | None = None,
 ) -> Friendship:
-    from fastapi import HTTPException, status
-
     if addressee_phone:
-        result = await db.execute(
-            select(User).where(User.phone == addressee_phone, User.deleted_at.is_(None))
-        )
-        label = "Bu telefon numarasına"
+        addressee = await user_services.get_by_phone(db, addressee_phone)
+        if not addressee:
+            raise LookupError("Bu telefon numarasına kayıtlı kullanıcı bulunamadı.")
     else:
-        result = await db.execute(
-            select(User).where(User.email == addressee_email, User.deleted_at.is_(None))
-        )
-        label = "Bu email'e"
-
-    addressee = result.scalars().first()
-    if not addressee:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{label} kayıtlı kullanıcı bulunamadı.")
+        addressee = await user_services.get_by_email(db, addressee_email)
+        if not addressee:
+            raise LookupError("Bu email'e kayıtlı kullanıcı bulunamadı.")
 
     if addressee.id == requester_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Kendinize arkadaşlık isteği gönderemezsiniz.")
+        raise ValueError("Kendinize arkadaşlık isteği gönderemezsiniz.")
 
     existing = await db.execute(
         select(Friendship).where(
@@ -43,7 +37,7 @@ async def send_request(
         )
     )
     if existing.scalars().first():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bu kullanıcı ile zaten bir arkadaşlık kaydı var.")
+        raise ValueError("Bu kullanıcı ile zaten bir arkadaşlık kaydı var.")
 
     friendship = Friendship(requester_id=requester_id, addressee_id=addressee.id)
     db.add(friendship)

@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 from src.core.database import get_db
 from src.core.security import get_current_user
+from src.modules.users import services
 from src.modules.users.models import User
 from src.modules.users.schemas import UserSearchResult
 
@@ -16,13 +16,4 @@ async def search_users(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(User)
-        .where(
-            User.email.ilike(f"%{email}%"),
-            User.id != current_user.id,
-            User.deleted_at.is_(None),
-        )
-        .limit(10)
-    )
-    return list(result.scalars().all())
+    return await services.search_by_email(db, email, exclude_id=current_user.id)
