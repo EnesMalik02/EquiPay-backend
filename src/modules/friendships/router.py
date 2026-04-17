@@ -23,7 +23,12 @@ async def send_friend_request(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    friendship = await services.send_request(db, requester_id=current_user.id, addressee_email=data.email)
+    friendship = await services.send_request(
+        db,
+        requester_id=current_user.id,
+        addressee_email=str(data.email) if data.email else None,
+        addressee_phone=data.phone,
+    )
     return {"id": str(friendship.id), "status": friendship.status}
 
 

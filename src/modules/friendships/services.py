@@ -8,16 +8,28 @@ from src.modules.users.models import User
 
 
 async def send_request(
-    db: AsyncSession, *, requester_id: uuid.UUID, addressee_email: str
+    db: AsyncSession,
+    *,
+    requester_id: uuid.UUID,
+    addressee_email: str | None = None,
+    addressee_phone: str | None = None,
 ) -> Friendship:
     from fastapi import HTTPException, status
 
-    result = await db.execute(
-        select(User).where(User.email == addressee_email, User.deleted_at.is_(None))
-    )
+    if addressee_phone:
+        result = await db.execute(
+            select(User).where(User.phone == addressee_phone, User.deleted_at.is_(None))
+        )
+        label = "Bu telefon numarasına"
+    else:
+        result = await db.execute(
+            select(User).where(User.email == addressee_email, User.deleted_at.is_(None))
+        )
+        label = "Bu email'e"
+
     addressee = result.scalars().first()
     if not addressee:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bu email'e kayıtlı kullanıcı bulunamadı.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{label} kayıtlı kullanıcı bulunamadı.")
 
     if addressee.id == requester_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Kendinize arkadaşlık isteği gönderemezsiniz.")

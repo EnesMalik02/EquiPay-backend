@@ -1,10 +1,17 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, model_validator
 
 
 class FriendRequestCreate(BaseModel):
-    email: EmailStr
+    email: EmailStr | None = None
+    phone: str | None = None
+
+    @model_validator(mode="after")
+    def email_or_phone_required(self) -> "FriendRequestCreate":
+        if not self.email and not self.phone:
+            raise ValueError("email veya phone alanlarından en az biri zorunludur.")
+        return self
 
 
 class FriendRequestRespond(BaseModel):
