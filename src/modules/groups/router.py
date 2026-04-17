@@ -193,10 +193,14 @@ async def add_member(
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
 
-    result = await db.execute(select(User).where(User.phone == data.phone, User.deleted_at.is_(None)))
+    if data.phone:
+        result = await db.execute(select(User).where(User.phone == data.phone, User.deleted_at.is_(None)))
+    else:
+        result = await db.execute(select(User).where(User.email == data.email, User.deleted_at.is_(None)))
     target_user = result.scalars().first()
     if not target_user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bu telefon numarasına kayıtlı kullanıcı bulunamadı.")
+        label = "telefon numarasına" if data.phone else "email adresine"
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Bu {label} kayıtlı kullanıcı bulunamadı.")
 
     try:
         return await services.add_member(db, group_id=group_id, user_id=target_user.id, role=data.role)

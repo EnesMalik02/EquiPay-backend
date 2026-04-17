@@ -49,6 +49,10 @@ async def register(request: Request, data: UserRegisterRequest, response: Respon
     if result.scalars().first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bu email adresi zaten kayıtlı.")
 
+    phone_result = await db.execute(select(User).where(User.phone == data.phone))
+    if phone_result.scalars().first():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bu telefon numarası zaten kayıtlı.")
+
     username = data.username
     if not username:
         base = data.email.split("@")[0]

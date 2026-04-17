@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr, model_validator
 
 
 # ── Group ──
@@ -29,8 +29,15 @@ class GroupResponse(BaseModel):
 # ── GroupMember ──
 
 class GroupMemberAdd(BaseModel):
-    phone: str
+    phone: str | None = None
+    email: EmailStr | None = None
     role: str = "member"
+
+    @model_validator(mode="after")
+    def phone_or_email_required(self) -> "GroupMemberAdd":
+        if not self.phone and not self.email:
+            raise ValueError("phone veya email alanlarından en az biri zorunludur.")
+        return self
 
 
 class GroupMemberRoleUpdate(BaseModel):
