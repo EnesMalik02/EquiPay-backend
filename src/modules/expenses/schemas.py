@@ -1,12 +1,12 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, field_validator
 
 SPLIT_TYPES = {"equal", "exact", "percentage"}
 
 
-# ── Expense ──
+# ── Input schemas ──
 
 class ExpenseSplitInput(BaseModel):
     user_id: uuid.UUID
@@ -51,18 +51,32 @@ class ExpenseSplitPayRequest(BaseModel):
     paid_amount: Decimal | None = None
 
 
+# ── Response schemas ──
+
 class ExpenseSplitResponse(BaseModel):
+    """Split detayı — expense detail sayfasında tüm split'ler için kullanılır."""
     id: uuid.UUID
     expense_id: uuid.UUID
     user_id: uuid.UUID
     owed_amount: Decimal
     paid_amount: Decimal
-    created_at: datetime | None = None
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
+
+
+class MySplitSummary(BaseModel):
+    """Kullanıcının kendi payı özeti — liste görünümleri için."""
+    id: uuid.UUID
+    owed_amount: Decimal
+    paid_amount: Decimal
+
+    class Config:
+        from_attributes = True
 
 
 class ExpenseResponse(BaseModel):
+    """Temel expense bilgisi — grup expense listesi için."""
     id: uuid.UUID
     group_id: uuid.UUID | None = None
     paid_by: uuid.UUID
@@ -74,14 +88,29 @@ class ExpenseResponse(BaseModel):
     split_type: str
     is_fully_paid: bool
     created_at: datetime | None = None
-    updated_at: datetime | None = None
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
 
 
 class ExpenseDetailResponse(ExpenseResponse):
+    """Expense detayı — tüm split'lerle birlikte."""
     splits: list[ExpenseSplitResponse] = []
 
 
-class RecentExpenseResponse(ExpenseDetailResponse):
+class ExpenseWithMySplitResponse(BaseModel):
+    """Kullanıcının split'i olan harcama özeti — home ve settlements için."""
+    id: uuid.UUID
+    group_id: uuid.UUID | None = None
     group_name: str | None = None
+    paid_by: uuid.UUID
+    title: str
+    amount: Decimal
+    currency: str
+    notes: str | None = None
+    expense_date: date | None = None
+    is_fully_paid: bool
+    my_split: MySplitSummary | None = None
+
+    class Config:
+        from_attributes = True

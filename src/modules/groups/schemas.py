@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, EmailStr, model_validator
+from pydantic import BaseModel, EmailStr, model_validator
 
 
 # ── Group ──
@@ -23,7 +23,8 @@ class GroupResponse(BaseModel):
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
 
 
 # ── GroupMember ──
@@ -54,4 +55,5 @@ class GroupMemberResponse(BaseModel):
     username: str | None = None
     display_name: str | None = None
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True

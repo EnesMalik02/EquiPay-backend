@@ -42,18 +42,28 @@ async def get_settlement_by_id(
 
 
 async def get_group_settlements(
-    db: AsyncSession, group_id: uuid.UUID
+    db: AsyncSession,
+    group_id: uuid.UUID,
+    *,
+    limit: int = 20,
+    offset: int = 0,
 ) -> list[Settlement]:
     result = await db.execute(
         select(Settlement)
         .where(Settlement.group_id == group_id)
         .order_by(Settlement.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
     return list(result.scalars().all())
 
 
 async def get_user_settlements(
-    db: AsyncSession, user_id: uuid.UUID
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    limit: int = 20,
+    offset: int = 0,
 ) -> list[Settlement]:
     result = await db.execute(
         select(Settlement)
@@ -61,6 +71,8 @@ async def get_user_settlements(
             (Settlement.payer_id == user_id) | (Settlement.receiver_id == user_id)
         )
         .order_by(Settlement.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
     return list(result.scalars().all())
 

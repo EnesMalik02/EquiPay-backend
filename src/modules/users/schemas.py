@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 
 class UserResponse(BaseModel):
@@ -14,7 +14,8 @@ class UserResponse(BaseModel):
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
 
 
 class UserSearchResult(BaseModel):
@@ -24,4 +25,5 @@ class UserSearchResult(BaseModel):
     avatar_url: str | None = None
     username: str | None = None
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True

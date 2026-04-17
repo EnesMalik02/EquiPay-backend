@@ -138,9 +138,10 @@ async def get_user_assigned_expenses(
     db: AsyncSession,
     user_id: uuid.UUID,
     *,
-    limit: int = 100,
+    limit: int = 20,
+    offset: int = 0,
 ) -> list[Expense]:
-    """Kullanıcının split'i olan tüm harcamalar (ExpenseSplit üzerinden)."""
+    """Kullanıcının split'i olan harcamalar (ExpenseSplit üzerinden, sayfalı)."""
     result = await db.execute(
         select(Expense)
         .join(ExpenseSplit, ExpenseSplit.expense_id == Expense.id)
@@ -151,6 +152,7 @@ async def get_user_assigned_expenses(
         )
         .order_by(Expense.expense_date.desc(), Expense.created_at.desc())
         .limit(limit)
+        .offset(offset)
     )
     return list(result.scalars().unique().all())
 

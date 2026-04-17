@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
@@ -40,26 +40,34 @@ async def create_settlement(
 @router.get(
     "/me",
     response_model=list[SettlementResponse],
-    summary="Kullanıcının ödeme kayıtları",
+    summary="Kullanıcının ödeme kayıtları (sayfalı)",
 )
 async def list_my_settlements(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await services.get_user_settlements(db, current_user.id)
+    return await services.get_user_settlements(
+        db, current_user.id, limit=limit, offset=offset
+    )
 
 
 @router.get(
     "/group/{group_id}",
     response_model=list[SettlementResponse],
-    summary="Grubun ödeme kayıtları",
+    summary="Grubun ödeme kayıtları (sayfalı)",
 )
 async def list_group_settlements(
     group_id: uuid.UUID,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await services.get_group_settlements(db, group_id)
+    return await services.get_group_settlements(
+        db, group_id, limit=limit, offset=offset
+    )
 
 
 @router.get("/{settlement_id}", response_model=SettlementResponse, summary="Ödeme detayı")

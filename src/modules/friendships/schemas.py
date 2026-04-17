@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, EmailStr, model_validator
+from pydantic import BaseModel, EmailStr, model_validator
 
 
 class FriendRequestCreate(BaseModel):
@@ -25,7 +25,8 @@ class FriendUserInfo(BaseModel):
     avatar_url: str | None = None
     username: str | None = None
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
 
 
 class FriendResponse(BaseModel):
@@ -33,10 +34,14 @@ class FriendResponse(BaseModel):
     user: FriendUserInfo
     created_at: datetime | None = None
 
+    class Config:
+        from_attributes = True
+
 
 class FriendRequestResponse(BaseModel):
     id: uuid.UUID
     requester: FriendUserInfo
     created_at: datetime | None = None
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True

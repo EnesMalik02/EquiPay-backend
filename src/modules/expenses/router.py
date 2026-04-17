@@ -5,18 +5,42 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.database import get_db
 from src.core.security import get_current_user
 from src.modules.users.models import User
+from src.modules.expenses.models import Expense
 from src.modules.expenses.schemas import (
     ExpenseCreate,
     ExpenseUpdate,
     ExpenseResponse,
     ExpenseDetailResponse,
-    RecentExpenseResponse,
+    ExpenseWithMySplitResponse,
+    MySplitSummary,
     ExpenseSplitPayRequest,
     ExpenseSplitResponse,
 )
 from src.modules.expenses import services
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
+
+
+def _build_with_my_split(exp: Expense, user_id: uuid.UUID) -> ExpenseWithMySplitResponse:
+    """ORM Expense nesnesini, yalnızca kullanıcının kendi payıyla birlikte döndürür."""
+    my_split_orm = next((s for s in exp.splits if s.user_id == user_id), None)
+    return ExpenseWithMySplitResponse(
+        id=exp.id,
+        group_id=exp.group_id,
+        group_name=exp.group.name if exp.group else None,
+        paid_by=exp.paid_by,
+        title=exp.title,
+        amount=exp.amount,
+        currency=exp.currency,
+        notes=exp.notes,
+        expense_date=exp.expense_date,
+        is_fully_paid=exp.is_fully_paid,
+        my_split=MySplitSummary(
+            id=my_split_orm.id,
+            owed_amount=my_split_orm.owed_amount,
+            paid_amount=my_split_orm.paid_amount,
+        ) if my_split_orm else None,
+    )
 
 
 @router.post(
@@ -65,26 +89,24 @@ async def list_group_expenses(
 
 @router.get(
     "/me/splits",
-    response_model=list[RecentExpenseResponse],
-    summary="Kullanıcının split'i olan tüm harcamalar",
+    response_model=list[ExpenseWithMySplitResponse],
+    summary="Kullanıcının split'i olan harcamalar (sayfalı)",
 )
 async def list_my_split_expenses(
-    limit: int = Query(default=100, ge=1, le=200),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    expenses = await services.get_user_assigned_expenses(db, current_user.id, limit=limit)
-    return [
-        RecentExpenseResponse.model_validate(exp, from_attributes=True).model_copy(
-            update={"group_name": exp.group.name if exp.group else None}
-        )
-        for exp in expenses
-    ]
+    expenses = await services.get_user_assigned_expenses(
+        db, current_user.id, limit=limit, offset=offset
+    )
+    return [_build_with_my_split(exp, current_user.id) for exp in expenses]
 
 
 @router.get(
     "/me/recent",
-    response_model=list[RecentExpenseResponse],
+    response_model=list[ExpenseWithMySplitResponse],
     summary="Kullanıcının son harcamaları (tüm gruplar)",
 )
 async def list_recent_my_expenses(
@@ -93,12 +115,7 @@ async def list_recent_my_expenses(
     db: AsyncSession = Depends(get_db),
 ):
     expenses = await services.get_recent_user_expenses(db, current_user.id, limit=limit)
-    return [
-        RecentExpenseResponse.model_validate(exp, from_attributes=True).model_copy(
-            update={"group_name": exp.group.name if exp.group else None}
-        )
-        for exp in expenses
-    ]
+    return [_build_with_my_split(exp, current_user.id) for exp in expenses]
 
 
 @router.get("/{expense_id}", response_model=ExpenseDetailResponse, summary="Masraf detayı")
@@ -126,8 +143,7 @@ async def update_expense(
     if expense.paid_by != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca masrafı oluşturan güncelleyebilir.")
     return await services.update_expense(
-        db,
-        expense,
+        db, expense,
         title=data.title,
         amount=data.amount,
         currency=data.currency,
