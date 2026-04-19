@@ -22,10 +22,10 @@ async def get_user_by_username(db: AsyncSession, username: str) -> User | None:
 
 
 async def get_user_by_identifier(db: AsyncSession, identifier: str) -> User | None:
-    """Email veya kullanıcı adı ile kullanıcı bulur."""
+    """Email veya telefon numarası ile kullanıcı bulur."""
     result = await db.execute(
         select(User).where(
-            or_(User.email == identifier, User.username == identifier),
+            or_(User.email == identifier, User.phone == identifier),
             User.deleted_at.is_(None),
         )
     )

@@ -68,7 +68,7 @@ async def register(
     return set_tokens_in_response(request, response, str(user.id))
 
 
-@router.post("/login", response_model=TokenResponse, summary="Kullanıcı Giriş", dependencies=[Depends(rate_limit("10/minute"))])
+@router.post("/login", response_model=TokenResponse, summary="User Login", dependencies=[Depends(rate_limit("10/minute"))])
 async def login(
     request: Request,
     data: UserLoginRequest,
@@ -77,7 +77,7 @@ async def login(
 ):
     user = await services.get_user_by_identifier(db, data.identifier)
     if not user or not verify_password(data.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email/kullanıcı adı veya şifre hatalı.")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email/phone number or password is incorrect.")
 
     return set_tokens_in_response(request, response, str(user.id))
 
