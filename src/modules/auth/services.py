@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.users.models import User
@@ -14,18 +14,27 @@ async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
     return result.scalars().first()
 
 
-async def get_user_by_id(db: AsyncSession, user_id: uuid.UUID) -> User | None:
-    result = await db.execute(select(User).where(User.id == user_id))
+async def get_user_by_username(db: AsyncSession, username: str) -> User | None:
+    result = await db.execute(
+        select(User).where(User.username == username, User.deleted_at.is_(None))
+    )
     return result.scalars().first()
 
 
-async def generate_unique_username(db: AsyncSession, base: str) -> str:
-    candidate = base[:50]
-    result = await db.execute(select(User).where(User.username == candidate))
-    if not result.scalars().first():
-        return candidate
-    suffix = str(uuid.uuid4())[:8]
-    return f"{candidate[:40]}_{suffix}"
+async def get_user_by_identifier(db: AsyncSession, identifier: str) -> User | None:
+    """Email veya kullanıcı adı ile kullanıcı bulur."""
+    result = await db.execute(
+        select(User).where(
+            or_(User.email == identifier, User.username == identifier),
+            User.deleted_at.is_(None),
+        )
+    )
+    return result.scalars().first()
+
+
+async def get_user_by_id(db: AsyncSession, user_id: uuid.UUID) -> User | None:
+    result = await db.execute(select(User).where(User.id == user_id))
+    return result.scalars().first()
 
 
 async def create_user(
@@ -34,17 +43,11 @@ async def create_user(
     email: str,
     password: str,
     phone: str,
-    display_name: str | None = None,
-    username: str | None = None,
+    username: str,
 ) -> User:
-    if not username:
-        base = email.split("@")[0]
-        username = await generate_unique_username(db, base)
-
     user = User(
         email=email,
         password_hash=hash_password(password),
-        display_name=display_name,
         username=username,
         phone=phone,
     )

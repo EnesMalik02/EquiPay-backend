@@ -5,12 +5,11 @@ class UserRegisterRequest(BaseModel):
     email: EmailStr
     password: str
     phone: str
-    display_name: str | None = None
-    username: str | None = None
+    username: str
 
 
 class UserLoginRequest(BaseModel):
-    email: EmailStr
+    identifier: str  # email veya kullanıcı adı
     password: str
 
 
