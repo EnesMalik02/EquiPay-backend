@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
+from src.core.ratelimit import rate_limit
 from src.core.security import get_current_user
 from src.modules.users.models import User
 from src.modules.expenses.models import Expense
@@ -48,6 +49,7 @@ def _build_with_my_split(exp: Expense, user_id: uuid.UUID) -> ExpenseWithMySplit
     response_model=ExpenseResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Yeni masraf oluştur",
+    dependencies=[Depends(rate_limit("30/minute"))],
 )
 async def create_expense(
     data: ExpenseCreate,
@@ -76,6 +78,7 @@ async def create_expense(
     "/group/{group_id}",
     response_model=list[ExpenseResponse],
     summary="Grubun masraflarını listele",
+    dependencies=[Depends(rate_limit("60/minute"))],
 )
 async def list_group_expenses(
     group_id: uuid.UUID,
@@ -91,6 +94,7 @@ async def list_group_expenses(
     "/me/splits",
     response_model=list[ExpenseWithMySplitResponse],
     summary="Kullanıcının split'i olan harcamalar (sayfalı)",
+    dependencies=[Depends(rate_limit("60/minute"))],
 )
 async def list_my_split_expenses(
     limit: int = Query(default=20, ge=1, le=100),
@@ -108,6 +112,7 @@ async def list_my_split_expenses(
     "/me/recent",
     response_model=list[ExpenseWithMySplitResponse],
     summary="Kullanıcının son harcamaları (tüm gruplar)",
+    dependencies=[Depends(rate_limit("60/minute"))],
 )
 async def list_recent_my_expenses(
     limit: int = Query(default=10, ge=1, le=50),
@@ -118,7 +123,7 @@ async def list_recent_my_expenses(
     return [_build_with_my_split(exp, current_user.id) for exp in expenses]
 
 
-@router.get("/{expense_id}", response_model=ExpenseDetailResponse, summary="Masraf detayı")
+@router.get("/{expense_id}", response_model=ExpenseDetailResponse, summary="Masraf detayı", dependencies=[Depends(rate_limit("60/minute"))])
 async def get_expense(
     expense_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
@@ -130,7 +135,7 @@ async def get_expense(
     return expense
 
 
-@router.patch("/{expense_id}", response_model=ExpenseResponse, summary="Masrafı güncelle")
+@router.patch("/{expense_id}", response_model=ExpenseResponse, summary="Masrafı güncelle", dependencies=[Depends(rate_limit("30/minute"))])
 async def update_expense(
     expense_id: uuid.UUID,
     data: ExpenseUpdate,
@@ -152,7 +157,7 @@ async def update_expense(
     )
 
 
-@router.delete("/{expense_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Masrafı sil (soft)")
+@router.delete("/{expense_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Masrafı sil (soft)", dependencies=[Depends(rate_limit("20/minute"))])
 async def delete_expense(
     expense_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
@@ -170,6 +175,7 @@ async def delete_expense(
     "/{expense_id}/splits/{split_id}/pay",
     response_model=ExpenseSplitResponse,
     summary="Split'i ödenmiş olarak işaretle",
+    dependencies=[Depends(rate_limit("30/minute"))],
 )
 async def pay_split(
     expense_id: uuid.UUID,

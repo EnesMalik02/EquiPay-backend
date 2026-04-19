@@ -1,6 +1,5 @@
 # database.py
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -55,12 +54,3 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.rollback()
             raise
 
-# ──────────────────────────────────────────────
-# Lifespan (tablo oluşturma + engine kapatma)
-# ──────────────────────────────────────────────
-@asynccontextmanager
-async def lifespan(app):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield
-    await engine.dispose()

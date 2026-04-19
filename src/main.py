@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import settings
-from src.core.database import lifespan
+from src.core.lifespan import lifespan
 from src.modules.auth.router import router as auth_router
 from src.modules.users.router import router as users_router
 from src.modules.groups.router import router as groups_router

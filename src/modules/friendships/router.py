@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
+from src.core.ratelimit import rate_limit
 from src.core.security import get_current_user
 from src.modules.users.models import User
 from src.modules.friendships.schemas import (
@@ -17,7 +18,7 @@ from src.modules.friendships import services
 router = APIRouter(prefix="/friendships", tags=["Friendships"])
 
 
-@router.post("", status_code=status.HTTP_201_CREATED, summary="Arkadaşlık isteği gönder")
+@router.post("", status_code=status.HTTP_201_CREATED, summary="Arkadaşlık isteği gönder", dependencies=[Depends(rate_limit("20/minute"))])
 async def send_friend_request(
     data: FriendRequestCreate,
     current_user: User = Depends(get_current_user),
@@ -38,7 +39,7 @@ async def send_friend_request(
     return {"id": str(friendship.id), "status": friendship.status}
 
 
-@router.get("", response_model=list[FriendResponse], summary="Arkadaş listesi")
+@router.get("", response_model=list[FriendResponse], summary="Arkadaş listesi", dependencies=[Depends(rate_limit("60/minute"))])
 async def list_friends(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -61,7 +62,7 @@ async def list_friends(
     return result
 
 
-@router.get("/pending", response_model=list[FriendRequestResponse], summary="Gelen arkadaşlık istekleri")
+@router.get("/pending", response_model=list[FriendRequestResponse], summary="Gelen arkadaşlık istekleri", dependencies=[Depends(rate_limit("60/minute"))])
 async def list_pending_requests(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -83,7 +84,7 @@ async def list_pending_requests(
     ]
 
 
-@router.patch("/{friendship_id}", summary="Arkadaşlık isteğini yanıtla")
+@router.patch("/{friendship_id}", summary="Arkadaşlık isteğini yanıtla", dependencies=[Depends(rate_limit("20/minute"))])
 async def respond_to_request(
     friendship_id: uuid.UUID,
     data: FriendRequestRespond,
@@ -111,7 +112,7 @@ async def respond_to_request(
         return {"detail": "İstek reddedildi."}
 
 
-@router.delete("/{friendship_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Arkadaşlıktan çık / İsteği sil")
+@router.delete("/{friendship_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Arkadaşlıktan çık / İsteği sil", dependencies=[Depends(rate_limit("20/minute"))])
 async def remove_friendship(
     friendship_id: uuid.UUID,
     current_user: User = Depends(get_current_user),

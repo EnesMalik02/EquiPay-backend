@@ -18,6 +18,7 @@ from src.modules.auth import services
 from src.modules.auth.schemas import TokenResponse, UserLoginRequest, UserRegisterRequest
 from src.modules.users import services as user_services
 from src.modules.users.models import User
+from src.core.ratelimit import rate_limit
 from src.modules.users.schemas import UserResponse
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -34,7 +35,7 @@ def set_tokens_in_response(request: Request, response: Response, user_id: str) -
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
-@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED, summary="Kullanıcı Kayıt")
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED, summary="Kullanıcı Kayıt", dependencies=[Depends(rate_limit("5/minute"))])
 async def register(
     request: Request,
     data: UserRegisterRequest,
@@ -67,7 +68,7 @@ async def register(
     return set_tokens_in_response(request, response, str(user.id))
 
 
-@router.post("/login", response_model=TokenResponse, summary="Kullanıcı Giriş")
+@router.post("/login", response_model=TokenResponse, summary="Kullanıcı Giriş", dependencies=[Depends(rate_limit("10/minute"))])
 async def login(
     request: Request,
     data: UserLoginRequest,
@@ -81,7 +82,7 @@ async def login(
     return set_tokens_in_response(request, response, str(user.id))
 
 
-@router.post("/refresh", response_model=TokenResponse, summary="Refresh Token ile Yeni Access Token Alma")
+@router.post("/refresh", response_model=TokenResponse, summary="Refresh Token ile Yeni Access Token Alma", dependencies=[Depends(rate_limit("20/minute"))])
 async def refresh_token(
     request: Request,
     response: Response,
@@ -111,12 +112,12 @@ async def refresh_token(
     return set_tokens_in_response(request, response, str(user.id))
 
 
-@router.get("/me", response_model=UserResponse, summary="Giriş Yapan Kullanıcı Bilgileri")
+@router.get("/me", response_model=UserResponse, summary="Giriş Yapan Kullanıcı Bilgileri", dependencies=[Depends(rate_limit("60/minute"))])
 async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, summary="Çıkış Yap")
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, summary="Çıkış Yap", dependencies=[Depends(rate_limit("10/minute"))])
 async def logout(request: Request, response: Response, current_user: User = Depends(get_current_user)):
     if request.headers.get("x-platform") == "web":
         response.delete_cookie("access_token")

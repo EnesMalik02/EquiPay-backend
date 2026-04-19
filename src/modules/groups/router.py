@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
+from src.core.ratelimit import rate_limit
 from src.core.security import get_current_user
 from src.modules.users import services as user_services
 from src.modules.users.models import User
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/groups", tags=["Groups"])
     response_model=GroupResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Yeni grup oluştur",
+    dependencies=[Depends(rate_limit("20/minute"))],
 )
 async def create_group(
     data: GroupCreate,
@@ -39,7 +41,7 @@ async def create_group(
     return group
 
 
-@router.get("", response_model=list[GroupResponse], summary="Kullanıcının gruplarını listele")
+@router.get("", response_model=list[GroupResponse], summary="Kullanıcının gruplarını listele", dependencies=[Depends(rate_limit("60/minute"))])
 async def list_my_groups(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -47,7 +49,7 @@ async def list_my_groups(
     return await services.get_user_groups(db, current_user.id)
 
 
-@router.get("/{group_id}", response_model=GroupResponse, summary="Grup detayı")
+@router.get("/{group_id}", response_model=GroupResponse, summary="Grup detayı", dependencies=[Depends(rate_limit("60/minute"))])
 async def get_group(
     group_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
@@ -59,7 +61,7 @@ async def get_group(
     return group
 
 
-@router.patch("/{group_id}", response_model=GroupResponse, summary="Grubu güncelle")
+@router.patch("/{group_id}", response_model=GroupResponse, summary="Grubu güncelle", dependencies=[Depends(rate_limit("30/minute"))])
 async def update_group(
     group_id: uuid.UUID,
     data: GroupUpdate,
@@ -79,6 +81,7 @@ async def update_group(
     "/{group_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Grubu sil",
+    dependencies=[Depends(rate_limit("10/minute"))],
     description=(
         "Grubu siler (deleted_at doldurulur). "
         "Yalnızca admin yapabilir. "
@@ -113,6 +116,7 @@ async def delete_group(
     "/{group_id}/leave",
     status_code=status.HTTP_200_OK,
     summary="Gruptan çık",
+    dependencies=[Depends(rate_limit("10/minute"))],
     description=(
         "Kullanıcıyı gruptan çıkarır. "
         "Açık borç/alacak varsa 409 döner. "
@@ -149,6 +153,7 @@ async def leave_group(
     "/{group_id}/members/{user_id}/role",
     response_model=GroupMemberResponse,
     summary="Üye rolünü güncelle",
+    dependencies=[Depends(rate_limit("20/minute"))],
     description="Yalnızca admin başka bir üyenin rolünü değiştirebilir.",
 )
 async def update_member_role(
@@ -183,6 +188,7 @@ async def update_member_role(
     response_model=GroupMemberResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Gruba üye ekle",
+    dependencies=[Depends(rate_limit("20/minute"))],
 )
 async def add_member(
     group_id: uuid.UUID,
@@ -214,6 +220,7 @@ async def add_member(
     "/{group_id}/members",
     response_model=list[GroupMemberResponse],
     summary="Grup üyelerini listele",
+    dependencies=[Depends(rate_limit("60/minute"))],
 )
 async def list_members(
     group_id: uuid.UUID,

@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
+from src.core.ratelimit import rate_limit
 from src.core.security import get_current_user
 from src.modules.users.models import User
 from src.modules.settlements.schemas import (
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/settlements", tags=["Settlements"])
     response_model=SettlementResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Yeni ödeme kaydı oluştur",
+    dependencies=[Depends(rate_limit("20/minute"))],
 )
 async def create_settlement(
     data: SettlementCreate,
@@ -41,6 +43,7 @@ async def create_settlement(
     "/me",
     response_model=list[SettlementResponse],
     summary="Kullanıcının ödeme kayıtları (sayfalı)",
+    dependencies=[Depends(rate_limit("60/minute"))],
 )
 async def list_my_settlements(
     limit: int = Query(default=20, ge=1, le=100),
@@ -57,6 +60,7 @@ async def list_my_settlements(
     "/group/{group_id}",
     response_model=list[SettlementResponse],
     summary="Grubun ödeme kayıtları (sayfalı)",
+    dependencies=[Depends(rate_limit("60/minute"))],
 )
 async def list_group_settlements(
     group_id: uuid.UUID,
@@ -70,7 +74,7 @@ async def list_group_settlements(
     )
 
 
-@router.get("/{settlement_id}", response_model=SettlementResponse, summary="Ödeme detayı")
+@router.get("/{settlement_id}", response_model=SettlementResponse, summary="Ödeme detayı", dependencies=[Depends(rate_limit("60/minute"))])
 async def get_settlement(
     settlement_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
@@ -86,6 +90,7 @@ async def get_settlement(
     "/{settlement_id}/status",
     response_model=SettlementResponse,
     summary="Ödeme durumunu güncelle",
+    dependencies=[Depends(rate_limit("20/minute"))],
 )
 async def update_settlement_status(
     settlement_id: uuid.UUID,
