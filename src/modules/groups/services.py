@@ -2,12 +2,12 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
+from src.modules.expenses import services as expenses_services
+from src.modules.groups import repository
 from src.modules.groups.models import Group, GroupMember
-from src.modules.expenses.models import Expense, ExpenseSplit
+from src.modules.users import services as users_services
 
 
 # ── Group CRUD ───────────────────────────────────────────────────────────
@@ -31,23 +31,16 @@ async def create_group(
 
 
 async def get_group_by_id(db: AsyncSession, group_id: uuid.UUID) -> Group | None:
-    result = await db.execute(
-        select(Group).where(Group.id == group_id, Group.deleted_at.is_(None))
-    )
-    return result.scalars().first()
+    return await repository.get_by_id(db, group_id)
 
 
 async def get_user_groups(db: AsyncSession, user_id: uuid.UUID) -> list[Group]:
-    result = await db.execute(
-        select(Group)
-        .join(GroupMember, GroupMember.group_id == Group.id)
-        .where(
-            GroupMember.user_id == user_id,
-            GroupMember.left_at.is_(None),
-            Group.deleted_at.is_(None),
-        )
-    )
-    return list(result.scalars().all())
+    return await repository.get_user_groups(db, user_id)
+
+
+async def get_user_group_ids(db: AsyncSession, user_id: uuid.UUID) -> list[uuid.UUID]:
+    """Kullanıcının aktif üyesi olduğu grup id'lerini döndürür."""
+    return await repository.get_user_group_ids(db, user_id)
 
 
 async def update_group(
@@ -77,17 +70,27 @@ async def add_member(
     db: AsyncSession,
     *,
     group_id: uuid.UUID,
-    user_id: uuid.UUID,
+    phone: str | None = None,
+    email: str | None = None,
+    user_id: uuid.UUID | None = None,
     role: str = "member",
 ) -> GroupMember:
-    result = await db.execute(
-        select(GroupMember).where(
-            GroupMember.group_id == group_id,
-            GroupMember.user_id == user_id,
-        )
-    )
-    existing = result.scalars().first()
+    """
+    Gruba üye ekler. user_id verilmezse phone/email üzerinden kullanıcı aranır.
+    Kullanıcı bulunamazsa LookupError, zaten üyeyse ValueError fırlatır.
+    """
+    if user_id is None:
+        if phone:
+            user = await users_services.get_by_phone(db, phone)
+            if not user:
+                raise LookupError("Bu telefon numarasına kayıtlı kullanıcı bulunamadı.")
+        else:
+            user = await users_services.get_by_email(db, email)
+            if not user:
+                raise LookupError("Bu email adresine kayıtlı kullanıcı bulunamadı.")
+        user_id = user.id
 
+    existing = await repository.get_existing_membership(db, group_id, user_id)
     if existing:
         if existing.left_at is None:
             raise ValueError("Kullanıcı zaten bu grubun aktif üyesi.")
@@ -105,25 +108,13 @@ async def add_member(
 
 
 async def get_group_members(db: AsyncSession, group_id: uuid.UUID) -> list[GroupMember]:
-    result = await db.execute(
-        select(GroupMember)
-        .options(selectinload(GroupMember.user))
-        .where(GroupMember.group_id == group_id, GroupMember.left_at.is_(None))
-    )
-    return list(result.scalars().all())
+    return await repository.get_members(db, group_id)
 
 
 async def get_member(
     db: AsyncSession, group_id: uuid.UUID, user_id: uuid.UUID
 ) -> GroupMember | None:
-    result = await db.execute(
-        select(GroupMember).where(
-            GroupMember.group_id == group_id,
-            GroupMember.user_id == user_id,
-            GroupMember.left_at.is_(None),
-        )
-    )
-    return result.scalars().first()
+    return await repository.get_member(db, group_id, user_id)
 
 
 async def remove_member(db: AsyncSession, member: GroupMember) -> None:
@@ -140,115 +131,17 @@ async def update_member_role(
     return member
 
 
-# ── Balance helpers ──────────────────────────────────────────────────────
-
-async def _get_user_outstanding_debt(
-    db: AsyncSession, group_id: uuid.UUID, user_id: uuid.UUID
-) -> Decimal:
-    result = await db.execute(
-        select(
-            func.coalesce(
-                func.sum(ExpenseSplit.owed_amount - ExpenseSplit.paid_amount),
-                Decimal("0"),
-            )
-        )
-        .join(Expense, Expense.id == ExpenseSplit.expense_id)
-        .where(
-            Expense.group_id == group_id,
-            Expense.deleted_at.is_(None),
-            ExpenseSplit.user_id == user_id,
-            ExpenseSplit.owed_amount > ExpenseSplit.paid_amount,
-        )
-    )
-    return result.scalar() or Decimal("0")
-
-
-async def _get_user_outstanding_receivable(
-    db: AsyncSession, group_id: uuid.UUID, user_id: uuid.UUID
-) -> Decimal:
-    result = await db.execute(
-        select(
-            func.coalesce(
-                func.sum(ExpenseSplit.owed_amount - ExpenseSplit.paid_amount),
-                Decimal("0"),
-            )
-        )
-        .join(Expense, Expense.id == ExpenseSplit.expense_id)
-        .where(
-            Expense.group_id == group_id,
-            Expense.deleted_at.is_(None),
-            Expense.paid_by == user_id,
-            ExpenseSplit.user_id != user_id,
-            ExpenseSplit.owed_amount > ExpenseSplit.paid_amount,
-        )
-    )
-    return result.scalar() or Decimal("0")
-
-
-async def get_user_net_balance(
-    db: AsyncSession, group_id: uuid.UUID, user_id: uuid.UUID
-) -> Decimal:
-    """Pozitif = alacaklı, Negatif = borçlu, 0 = dengede."""
-    receivable = await _get_user_outstanding_receivable(db, group_id, user_id)
-    debt = await _get_user_outstanding_debt(db, group_id, user_id)
-    return receivable - debt
-
-
-async def _has_any_unsettled_balance(db: AsyncSession, group_id: uuid.UUID) -> bool:
-    result = await db.execute(
-        select(
-            func.coalesce(
-                func.sum(ExpenseSplit.owed_amount - ExpenseSplit.paid_amount),
-                Decimal("0"),
-            )
-        )
-        .join(Expense, Expense.id == ExpenseSplit.expense_id)
-        .where(
-            Expense.group_id == group_id,
-            Expense.deleted_at.is_(None),
-            ExpenseSplit.owed_amount > ExpenseSplit.paid_amount,
-        )
-    )
-    total = result.scalar() or Decimal("0")
-    return total > Decimal("0")
-
-
-async def _count_active_members(db: AsyncSession, group_id: uuid.UUID) -> int:
-    result = await db.execute(
-        select(func.count()).select_from(GroupMember).where(
-            GroupMember.group_id == group_id,
-            GroupMember.left_at.is_(None),
-        )
-    )
-    return result.scalar() or 0
-
-
 # ── Group lifecycle ──────────────────────────────────────────────────────
 
 async def delete_group(db: AsyncSession, group: Group) -> None:
-    """
-    Grubu soft-delete yapar.
-    Şart: Gruptaki tüm bakiyeler sıfır olmalı.
-    Yalnızca admin çağırabilir (kontrol router'da).
-    """
-    if await _has_any_unsettled_balance(db, group.id):
+    if await expenses_services.has_unsettled_balance(db, group.id):
         raise ValueError("Grupta açık borçlar var. Önce tüm bakiyeleri kapatın.")
     await soft_delete_group(db, group)
 
 
 async def leave_group(db: AsyncSession, group: Group, user_id: uuid.UUID) -> dict:
-    """
-    Kullanıcıyı gruptan çıkarır.
-
-    - Açık borç/alacak varsa ValueError.
-    - Admin ise ve başka aktif üye varsa PermissionError.
-    - Admin ise ve son üyeyse grubu soft-delete eder.
-    - Normal üye ise left_at doldurulur.
-
-    Döner: {"action": "left"} veya {"action": "group_deleted"}
-    """
-    receivable = await _get_user_outstanding_receivable(db, group.id, user_id)
-    debt = await _get_user_outstanding_debt(db, group.id, user_id)
+    receivable = await expenses_services.get_user_outstanding_receivable(db, group.id, user_id)
+    debt = await expenses_services.get_user_outstanding_debt(db, group.id, user_id)
 
     if receivable != Decimal("0") or debt != Decimal("0"):
         raise ValueError(
@@ -256,12 +149,12 @@ async def leave_group(db: AsyncSession, group: Group, user_id: uuid.UUID) -> dic
             f"Alacak: {receivable}, Borç: {debt}"
         )
 
-    member = await get_member(db, group.id, user_id)
+    member = await repository.get_member(db, group.id, user_id)
     if not member:
         raise LookupError("Bu grupta aktif üyeliğiniz bulunamadı.")
 
     if member.role == "admin":
-        active_count = await _count_active_members(db, group.id)
+        active_count = await repository.get_active_member_count(db, group.id)
         if active_count > 1:
             raise PermissionError("Gruptan çıkmadan önce başka bir üyeye admin rolü atayın.")
         member.left_at = datetime.now(timezone.utc)

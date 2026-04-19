@@ -1,35 +1,41 @@
 import uuid
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.security import hash_password
+from src.modules.users import repository
 from src.modules.users.models import User
 
 
 async def get_by_email(db: AsyncSession, email: str) -> User | None:
-    result = await db.execute(
-        select(User).where(User.email == email, User.deleted_at.is_(None))
-    )
-    return result.scalars().first()
+    return await repository.get_by_email(db, email)
 
 
 async def get_by_phone(db: AsyncSession, phone: str) -> User | None:
-    result = await db.execute(
-        select(User).where(User.phone == phone, User.deleted_at.is_(None))
-    )
-    return result.scalars().first()
+    return await repository.get_by_phone(db, phone)
 
 
 async def search_by_email(
     db: AsyncSession, email: str, *, exclude_id: uuid.UUID, limit: int = 10
 ) -> list[User]:
-    result = await db.execute(
-        select(User)
-        .where(
-            User.email.ilike(f"%{email}%"),
-            User.id != exclude_id,
-            User.deleted_at.is_(None),
-        )
-        .limit(limit)
+    return await repository.search_by_email(db, email, exclude_id=exclude_id, limit=limit)
+
+
+async def create_user(
+    db: AsyncSession,
+    *,
+    email: str,
+    password: str,
+    phone: str,
+    username: str,
+) -> User:
+    user = User(
+        email=email,
+        password_hash=hash_password(password),
+        username=username,
+        phone=phone,
     )
-    return list(result.scalars().all())
+    db.add(user)
+    await db.flush()
+    await db.refresh(user)
+    return user

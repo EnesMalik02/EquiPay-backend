@@ -2,10 +2,12 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.settlements import repository
 from src.modules.settlements.models import Settlement
+
+_VALID_STATUSES = frozenset({"confirmed", "rejected", "cancelled"})
 
 
 async def create_settlement(
@@ -35,10 +37,7 @@ async def create_settlement(
 async def get_settlement_by_id(
     db: AsyncSession, settlement_id: uuid.UUID
 ) -> Settlement | None:
-    result = await db.execute(
-        select(Settlement).where(Settlement.id == settlement_id)
-    )
-    return result.scalars().first()
+    return await repository.get_by_id(db, settlement_id)
 
 
 async def get_group_settlements(
@@ -48,14 +47,7 @@ async def get_group_settlements(
     limit: int = 20,
     offset: int = 0,
 ) -> list[Settlement]:
-    result = await db.execute(
-        select(Settlement)
-        .where(Settlement.group_id == group_id)
-        .order_by(Settlement.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-    )
-    return list(result.scalars().all())
+    return await repository.get_by_group(db, group_id, limit=limit, offset=offset)
 
 
 async def get_user_settlements(
@@ -65,28 +57,12 @@ async def get_user_settlements(
     limit: int = 20,
     offset: int = 0,
 ) -> list[Settlement]:
-    result = await db.execute(
-        select(Settlement)
-        .where(
-            (Settlement.payer_id == user_id) | (Settlement.receiver_id == user_id)
-        )
-        .order_by(Settlement.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-    )
-    return list(result.scalars().all())
-
-
-_VALID_STATUSES = frozenset({"confirmed", "rejected", "cancelled"})
+    return await repository.get_by_user(db, user_id, limit=limit, offset=offset)
 
 
 def validate_status_transition(
     settlement: Settlement, new_status: str, actor_id: uuid.UUID
 ) -> None:
-    """
-    Durum geçişini doğrular.
-    Geçersizse ValueError (iş hatası) veya PermissionError (yetki hatası) fırlatır.
-    """
     if new_status not in _VALID_STATUSES:
         raise ValueError(f"Geçersiz durum. Geçerli durumlar: {', '.join(sorted(_VALID_STATUSES))}")
 

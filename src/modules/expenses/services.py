@@ -2,13 +2,12 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
+from src.modules.expenses import repository
 from src.modules.expenses.models import Expense, ExpenseSplit
 from src.modules.expenses.schemas import ExpenseSplitInput
-from src.modules.groups.models import Group, GroupMember
 
 
 async def create_expense(
@@ -46,30 +45,18 @@ async def create_expense(
             expense_id=expense.id,
             user_id=s.user_id,
             owed_amount=s.owed_amount,
-            # Faturayı ödeyen kişinin kendi payı anında ödenmiş sayılır.
             paid_amount=s.owed_amount if s.user_id == paid_by else Decimal("0"),
         )
         db.add(split)
 
     await db.flush()
-
-    result = await db.execute(
-        select(Expense)
-        .options(selectinload(Expense.splits))
-        .where(Expense.id == expense.id)
-    )
-    return result.scalar_one()
+    return await repository.get_by_id(db, expense.id)
 
 
 async def get_expense_by_id(
     db: AsyncSession, expense_id: uuid.UUID
 ) -> Expense | None:
-    result = await db.execute(
-        select(Expense)
-        .options(selectinload(Expense.splits))
-        .where(Expense.id == expense_id, Expense.deleted_at.is_(None))
-    )
-    return result.scalars().first()
+    return await repository.get_by_id(db, expense_id)
 
 
 async def get_group_expenses(
@@ -79,15 +66,7 @@ async def get_group_expenses(
     limit: int = 20,
     offset: int = 0,
 ) -> list[Expense]:
-    result = await db.execute(
-        select(Expense)
-        .options(selectinload(Expense.splits))
-        .where(Expense.group_id == group_id, Expense.deleted_at.is_(None))
-        .order_by(Expense.expense_date.desc())
-        .limit(limit)
-        .offset(offset)
-    )
-    return list(result.scalars().all())
+    return await repository.get_by_group(db, group_id, limit=limit, offset=offset)
 
 
 async def update_expense(
@@ -111,13 +90,38 @@ async def update_expense(
     if expense_date is not None:
         expense.expense_date = expense_date
     await db.flush()
+    return await repository.get_by_id(db, expense.id)
 
-    result = await db.execute(
-        select(Expense)
-        .options(selectinload(Expense.splits))
-        .where(Expense.id == expense.id)
+
+async def update_as_owner(
+    db: AsyncSession,
+    expense: Expense,
+    user_id: uuid.UUID,
+    *,
+    title: str | None = None,
+    amount: Decimal | None = None,
+    currency: str | None = None,
+    notes: str | None = None,
+    expense_date=None,
+) -> Expense:
+    if expense.paid_by != user_id:
+        raise PermissionError("Yalnızca masrafı oluşturan güncelleyebilir.")
+    return await update_expense(
+        db, expense,
+        title=title,
+        amount=amount,
+        currency=currency,
+        notes=notes,
+        expense_date=expense_date,
     )
-    return result.scalar_one()
+
+
+async def delete_as_owner(
+    db: AsyncSession, expense: Expense, user_id: uuid.UUID
+) -> None:
+    if expense.paid_by != user_id:
+        raise PermissionError("Yalnızca masrafı oluşturan silebilir.")
+    await soft_delete_expense(db, expense)
 
 
 async def soft_delete_expense(db: AsyncSession, expense: Expense) -> None:
@@ -128,10 +132,7 @@ async def soft_delete_expense(db: AsyncSession, expense: Expense) -> None:
 async def get_split_by_id(
     db: AsyncSession, split_id: uuid.UUID
 ) -> ExpenseSplit | None:
-    result = await db.execute(
-        select(ExpenseSplit).where(ExpenseSplit.id == split_id)
-    )
-    return result.scalars().first()
+    return await repository.get_split_by_id(db, split_id)
 
 
 async def get_user_assigned_expenses(
@@ -141,20 +142,7 @@ async def get_user_assigned_expenses(
     limit: int = 20,
     offset: int = 0,
 ) -> list[Expense]:
-    """Kullanıcının split'i olan harcamalar (ExpenseSplit üzerinden, sayfalı)."""
-    result = await db.execute(
-        select(Expense)
-        .join(ExpenseSplit, ExpenseSplit.expense_id == Expense.id)
-        .options(selectinload(Expense.splits), selectinload(Expense.group))
-        .where(
-            ExpenseSplit.user_id == user_id,
-            Expense.deleted_at.is_(None),
-        )
-        .order_by(Expense.expense_date.desc(), Expense.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-    )
-    return list(result.scalars().unique().all())
+    return await repository.get_user_assigned(db, user_id, limit=limit, offset=offset)
 
 
 async def get_recent_user_expenses(
@@ -163,19 +151,7 @@ async def get_recent_user_expenses(
     *,
     limit: int = 10,
 ) -> list[Expense]:
-    result = await db.execute(
-        select(Expense)
-        .join(GroupMember, GroupMember.group_id == Expense.group_id)
-        .options(selectinload(Expense.splits), selectinload(Expense.group))
-        .where(
-            GroupMember.user_id == user_id,
-            GroupMember.left_at.is_(None),
-            Expense.deleted_at.is_(None),
-        )
-        .order_by(Expense.expense_date.desc(), Expense.created_at.desc())
-        .limit(limit)
-    )
-    return list(result.scalars().unique().all())
+    return await repository.get_recent_for_user(db, user_id, limit=limit)
 
 
 async def pay_split(
@@ -184,8 +160,70 @@ async def pay_split(
     *,
     paid_amount: Decimal | None = None,
 ) -> ExpenseSplit:
-    """paid_amount verilmezse tüm borcu ödenmiş olarak işaretler."""
     split.paid_amount = paid_amount if paid_amount is not None else split.owed_amount
     await db.flush()
     await db.refresh(split)
     return split
+
+
+# ── Bakiye sorguları (groups modülü tarafından kullanılır) ────────────────
+
+async def get_user_outstanding_debt(
+    db: AsyncSession, group_id: uuid.UUID, user_id: uuid.UUID
+) -> Decimal:
+    result = await db.execute(
+        select(
+            func.coalesce(
+                func.sum(ExpenseSplit.owed_amount - ExpenseSplit.paid_amount),
+                Decimal("0"),
+            )
+        )
+        .join(Expense, Expense.id == ExpenseSplit.expense_id)
+        .where(
+            Expense.group_id == group_id,
+            Expense.deleted_at.is_(None),
+            ExpenseSplit.user_id == user_id,
+            ExpenseSplit.owed_amount > ExpenseSplit.paid_amount,
+        )
+    )
+    return result.scalar() or Decimal("0")
+
+
+async def get_user_outstanding_receivable(
+    db: AsyncSession, group_id: uuid.UUID, user_id: uuid.UUID
+) -> Decimal:
+    result = await db.execute(
+        select(
+            func.coalesce(
+                func.sum(ExpenseSplit.owed_amount - ExpenseSplit.paid_amount),
+                Decimal("0"),
+            )
+        )
+        .join(Expense, Expense.id == ExpenseSplit.expense_id)
+        .where(
+            Expense.group_id == group_id,
+            Expense.deleted_at.is_(None),
+            Expense.paid_by == user_id,
+            ExpenseSplit.user_id != user_id,
+            ExpenseSplit.owed_amount > ExpenseSplit.paid_amount,
+        )
+    )
+    return result.scalar() or Decimal("0")
+
+
+async def has_unsettled_balance(db: AsyncSession, group_id: uuid.UUID) -> bool:
+    result = await db.execute(
+        select(
+            func.coalesce(
+                func.sum(ExpenseSplit.owed_amount - ExpenseSplit.paid_amount),
+                Decimal("0"),
+            )
+        )
+        .join(Expense, Expense.id == ExpenseSplit.expense_id)
+        .where(
+            Expense.group_id == group_id,
+            Expense.deleted_at.is_(None),
+            ExpenseSplit.owed_amount > ExpenseSplit.paid_amount,
+        )
+    )
+    return (result.scalar() or Decimal("0")) > Decimal("0")

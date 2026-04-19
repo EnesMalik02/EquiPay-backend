@@ -1,40 +1,26 @@
 import uuid
 
-from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.users.models import User
 from src.core.security import hash_password
+from src.modules.users import repository as users_repo
+from src.modules.users.models import User
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
-    result = await db.execute(
-        select(User).where(User.email == email, User.deleted_at.is_(None))
-    )
-    return result.scalars().first()
+    return await users_repo.get_by_email(db, email)
 
 
 async def get_user_by_username(db: AsyncSession, username: str) -> User | None:
-    result = await db.execute(
-        select(User).where(User.username == username, User.deleted_at.is_(None))
-    )
-    return result.scalars().first()
+    return await users_repo.get_by_username(db, username)
 
 
 async def get_user_by_identifier(db: AsyncSession, identifier: str) -> User | None:
-    """Email veya telefon numarası ile kullanıcı bulur."""
-    result = await db.execute(
-        select(User).where(
-            or_(User.email == identifier, User.phone == identifier),
-            User.deleted_at.is_(None),
-        )
-    )
-    return result.scalars().first()
+    return await users_repo.get_by_identifier(db, identifier)
 
 
 async def get_user_by_id(db: AsyncSession, user_id: uuid.UUID) -> User | None:
-    result = await db.execute(select(User).where(User.id == user_id))
-    return result.scalars().first()
+    return await users_repo.get_by_id(db, user_id)
 
 
 async def create_user(

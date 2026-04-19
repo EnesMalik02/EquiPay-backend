@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.database import get_db
 from src.core.ratelimit import rate_limit
 from src.core.security import get_current_user
-from src.modules.users.models import User
 from src.modules.expenses.models import Expense
 from src.modules.expenses.schemas import (
     ExpenseCreate,
@@ -18,12 +17,13 @@ from src.modules.expenses.schemas import (
     ExpenseSplitResponse,
 )
 from src.modules.expenses import services
+from src.modules.users.models import User
+from src.services import expense_queries
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
 
 
 def _build_with_my_split(exp: Expense, user_id: uuid.UUID) -> ExpenseWithMySplitResponse:
-    """ORM Expense nesnesini, yalnızca kullanıcının kendi payıyla birlikte döndürür."""
     my_split_orm = next((s for s in exp.splits if s.user_id == user_id), None)
     return ExpenseWithMySplitResponse(
         id=exp.id,
@@ -57,7 +57,7 @@ async def create_expense(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        expense = await services.create_expense(
+        return await expense_queries.create_expense(
             db,
             group_id=data.group_id,
             paid_by=data.paid_by,
@@ -68,10 +68,12 @@ async def create_expense(
             expense_date=data.expense_date,
             split_type=data.split_type,
             splits=data.splits,
+            current_user_id=current_user.id,
         )
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    return expense
 
 
 @router.get(
@@ -87,7 +89,12 @@ async def list_group_expenses(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await services.get_group_expenses(db, group_id, limit=limit, offset=offset)
+    try:
+        return await expense_queries.list_group_expenses(
+            db, group_id, current_user.id, limit=limit, offset=offset
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
 
 
 @router.get(
@@ -123,52 +130,69 @@ async def list_recent_my_expenses(
     return [_build_with_my_split(exp, current_user.id) for exp in expenses]
 
 
-@router.get("/{expense_id}", response_model=ExpenseDetailResponse, summary="Masraf detayı", dependencies=[Depends(rate_limit("60/minute"))])
+@router.get(
+    "/{expense_id}",
+    response_model=ExpenseDetailResponse,
+    summary="Masraf detayı",
+    dependencies=[Depends(rate_limit("60/minute"))],
+)
 async def get_expense(
     expense_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    expense = await services.get_expense_by_id(db, expense_id)
-    if not expense:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Masraf bulunamadı.")
-    return expense
+    try:
+        return await expense_queries.get_expense(db, expense_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
 
 
-@router.patch("/{expense_id}", response_model=ExpenseResponse, summary="Masrafı güncelle", dependencies=[Depends(rate_limit("30/minute"))])
+@router.patch(
+    "/{expense_id}",
+    response_model=ExpenseResponse,
+    summary="Masrafı güncelle",
+    dependencies=[Depends(rate_limit("30/minute"))],
+)
 async def update_expense(
     expense_id: uuid.UUID,
     data: ExpenseUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    expense = await services.get_expense_by_id(db, expense_id)
-    if not expense:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Masraf bulunamadı.")
-    if expense.paid_by != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca masrafı oluşturan güncelleyebilir.")
-    return await services.update_expense(
-        db, expense,
-        title=data.title,
-        amount=data.amount,
-        currency=data.currency,
-        notes=data.notes,
-        expense_date=data.expense_date,
-    )
+    try:
+        return await expense_queries.update_expense(
+            db, expense_id, current_user.id,
+            title=data.title,
+            amount=data.amount,
+            currency=data.currency,
+            notes=data.notes,
+            expense_date=data.expense_date,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
 
 
-@router.delete("/{expense_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Masrafı sil (soft)", dependencies=[Depends(rate_limit("20/minute"))])
+@router.delete(
+    "/{expense_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Masrafı sil (soft)",
+    dependencies=[Depends(rate_limit("20/minute"))],
+)
 async def delete_expense(
     expense_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    expense = await services.get_expense_by_id(db, expense_id)
-    if not expense:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Masraf bulunamadı.")
-    if expense.paid_by != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca masrafı oluşturan silebilir.")
-    await services.soft_delete_expense(db, expense)
+    try:
+        await expense_queries.delete_expense(db, expense_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
 
 
 @router.patch(

@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.database import get_db
 from src.core.ratelimit import rate_limit
 from src.core.security import get_current_user
-from src.modules.users import services as user_services
 from src.modules.users.models import User
 from src.modules.groups.schemas import (
     GroupCreate,
@@ -200,18 +199,12 @@ async def add_member(
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
 
-    if data.phone:
-        target_user = await user_services.get_by_phone(db, data.phone)
-        label = "telefon numarasına"
-    else:
-        target_user = await user_services.get_by_email(db, data.email)
-        label = "email adresine"
-
-    if not target_user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Bu {label} kayıtlı kullanıcı bulunamadı.")
-
     try:
-        return await services.add_member(db, group_id=group_id, user_id=target_user.id, role=data.role)
+        return await services.add_member(
+            db, group_id=group_id, phone=data.phone, email=data.email, role=data.role
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
