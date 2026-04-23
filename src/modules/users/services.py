@@ -25,6 +25,33 @@ async def search_by_email(
     return await repository.search_by_email(db, email, exclude_id=exclude_id, limit=limit)
 
 
+async def update_profile(
+    db: AsyncSession,
+    user: User,
+    *,
+    email: str | None = None,
+    display_name: str | None = None,
+    username: str | None = None,
+    phone: str | None = None,
+) -> User:
+    from fastapi import HTTPException, status
+    if email and email != user.email:
+        existing = await repository.get_by_email(db, email)
+        if existing:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bu e-posta zaten kullanılıyor.")
+    if username and username != user.username:
+        existing = await repository.get_by_username(db, username)
+        if existing:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bu kullanıcı adı zaten kullanılıyor.")
+    if phone and phone != user.phone:
+        existing = await repository.get_by_phone(db, phone)
+        if existing:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bu telefon numarası zaten kullanılıyor.")
+    return await repository.update_profile(
+        db, user, email=email, display_name=display_name, username=username, phone=phone
+    )
+
+
 async def create_user(
     db: AsyncSession,
     *,

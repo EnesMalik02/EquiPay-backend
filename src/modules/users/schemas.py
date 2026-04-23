@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 
 class UserResponse(BaseModel):
@@ -16,6 +16,13 @@ class UserResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class UpdateProfileRequest(BaseModel):
+    email: EmailStr | None = None
+    display_name: str | None = None
+    username: str | None = None
+    phone: str | None = None
 
 
 class UserSearchResult(BaseModel):

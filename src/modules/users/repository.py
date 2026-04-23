@@ -43,6 +43,30 @@ async def get_by_identifier(db: AsyncSession, identifier: str) -> User | None:
     return result.scalars().first()
 
 
+async def update_profile(
+    db: AsyncSession,
+    user: User,
+    *,
+    email: str | None,
+    display_name: str | None,
+    username: str | None,
+    phone: str | None,
+) -> User:
+    from datetime import datetime, timezone
+    if email is not None:
+        user.email = email
+    if display_name is not None:
+        user.display_name = display_name
+    if username is not None:
+        user.username = username
+    if phone is not None:
+        user.phone = phone
+    user.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+    await db.refresh(user)
+    return user
+
+
 async def search_by_email(
     db: AsyncSession, email: str, *, exclude_id: uuid.UUID, limit: int = 10
 ) -> list[User]:
