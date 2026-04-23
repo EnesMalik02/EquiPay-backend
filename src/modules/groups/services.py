@@ -5,8 +5,10 @@ from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.expenses import services as expenses_services
+from src.modules.friendships import repository as friendships_repository
 from src.modules.groups import repository
 from src.modules.groups.models import Group, GroupMember
+from src.modules.notifications import repository as notifications_repository
 from src.modules.users import services as users_services
 
 
@@ -70,14 +72,15 @@ async def add_member(
     db: AsyncSession,
     *,
     group_id: uuid.UUID,
+    invited_by: uuid.UUID,
     phone: str | None = None,
     email: str | None = None,
     user_id: uuid.UUID | None = None,
     role: str = "member",
 ) -> GroupMember:
     """
-    Gruba üye ekler. user_id verilmezse phone/email üzerinden kullanıcı aranır.
-    Kullanıcı bulunamazsa LookupError, zaten üyeyse ValueError fırlatır.
+    Gruba üye ekler. Davet eden ile davet edilen arkadaşsa direkt aktif,
+    değilse pending durumunda eklenir ve bildirim gönderilir.
     """
     if user_id is None:
         if phone:
@@ -93,16 +96,73 @@ async def add_member(
     existing = await repository.get_existing_membership(db, group_id, user_id)
     if existing:
         if existing.left_at is None:
+            if existing.status == "pending":
+                raise ValueError("Kullanıcıya davet gönderildi, yanıt bekleniyor.")
             raise ValueError("Kullanıcı zaten bu grubun aktif üyesi.")
         existing.left_at = None
         existing.role = role
+        existing.status = await _resolve_member_status(db, invited_by, user_id)
         await db.flush()
+        if existing.status == "pending":
+            await _send_invitation_notification(db, group_id=group_id, user_id=user_id, invited_by=invited_by)
         return await repository.get_member_with_user(db, existing.id)
 
-    member = GroupMember(group_id=group_id, user_id=user_id, role=role)
+    status = await _resolve_member_status(db, invited_by, user_id)
+    member = GroupMember(group_id=group_id, user_id=user_id, role=role, status=status)
     db.add(member)
     await db.flush()
+    if status == "pending":
+        await _send_invitation_notification(db, group_id=group_id, user_id=user_id, invited_by=invited_by)
     return await repository.get_member_with_user(db, member.id)
+
+
+async def _resolve_member_status(
+    db: AsyncSession, invited_by: uuid.UUID, user_id: uuid.UUID
+) -> str:
+    friendship = await friendships_repository.get_existing(db, invited_by, user_id)
+    if friendship and friendship.status == "accepted":
+        return "active"
+    return "pending"
+
+
+async def _send_invitation_notification(
+    db: AsyncSession,
+    *,
+    group_id: uuid.UUID,
+    user_id: uuid.UUID,
+    invited_by: uuid.UUID,
+) -> None:
+    inviter = await users_services.get_by_id(db, invited_by)
+    group = await repository.get_by_id(db, group_id)
+    await notifications_repository.create(
+        db,
+        user_id=user_id,
+        type="group_invitation",
+        data={
+            "group_id": str(group_id),
+            "group_name": group.name if group else "",
+            "invited_by_id": str(invited_by),
+            "invited_by_name": inviter.display_name or inviter.username if inviter else "",
+        },
+    )
+
+
+async def respond_to_invitation(
+    db: AsyncSession,
+    *,
+    group_id: uuid.UUID,
+    user_id: uuid.UUID,
+    accept: bool,
+) -> None:
+    member = await repository.get_pending_invitation(db, group_id, user_id)
+    if not member:
+        raise LookupError("Bekleyen bir grup daveti bulunamadı.")
+    if accept:
+        member.status = "active"
+        await db.flush()
+    else:
+        member.left_at = datetime.now(timezone.utc)
+        await db.flush()
 
 
 async def get_group_members(db: AsyncSession, group_id: uuid.UUID) -> list[GroupMember]:

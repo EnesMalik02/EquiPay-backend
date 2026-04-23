@@ -9,6 +9,7 @@ from src.modules.groups.router import router as groups_router
 from src.modules.expenses.router import router as expenses_router
 from src.modules.settlements.router import router as settlements_router
 from src.modules.friendships.router import router as friendships_router
+from src.modules.notifications.router import router as notifications_router
 
 app = FastAPI(
     title="EquiPay API",
@@ -30,6 +31,7 @@ app.include_router(groups_router, prefix="/api")
 app.include_router(expenses_router, prefix="/api")
 app.include_router(settlements_router, prefix="/api")
 app.include_router(friendships_router, prefix="/api")
+app.include_router(notifications_router, prefix="/api")
 
 @app.get("/", summary="Health check")
 async def health_check():

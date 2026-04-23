@@ -15,6 +15,7 @@ from src.modules.groups.schemas import (
     GroupMemberResponse,
     GroupMemberAddResponse,
     GroupMemberListResponse,
+    GroupInvitationRespond,
 )
 from src.modules.groups import services
 
@@ -203,7 +204,12 @@ async def add_member(
 
     try:
         return await services.add_member(
-            db, group_id=group_id, phone=data.phone, email=data.email, role=data.role
+            db,
+            group_id=group_id,
+            invited_by=current_user.id,
+            phone=data.phone,
+            email=data.email,
+            role=data.role,
         )
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
@@ -223,3 +229,35 @@ async def list_members(
     db: AsyncSession = Depends(get_db),
 ):
     return await services.get_group_members(db, group_id)
+
+
+@router.post(
+    "/{group_id}/invitations/respond",
+    status_code=status.HTTP_200_OK,
+    summary="Grup davetini kabul et veya reddet",
+    dependencies=[Depends(rate_limit("20/minute"))],
+)
+async def respond_to_invitation(
+    group_id: uuid.UUID,
+    data: GroupInvitationRespond,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if data.action not in ("accept", "decline"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="action 'accept' veya 'decline' olmalıdır.",
+        )
+    group = await services.get_group_by_id(db, group_id)
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
+    try:
+        await services.respond_to_invitation(
+            db,
+            group_id=group_id,
+            user_id=current_user.id,
+            accept=data.action == "accept",
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    return {"detail": "Gruba katıldınız." if data.action == "accept" else "Davet reddedildi."}

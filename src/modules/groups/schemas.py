@@ -64,9 +64,14 @@ class GroupMemberAddResponse(BaseModel):
     username: str | None = None
     display_name: str | None = None
     role: str
+    status: str
 
     class Config:
         from_attributes = True
+
+
+class GroupInvitationRespond(BaseModel):
+    action: str  # "accept" | "decline"
 
 
 class GroupMemberListResponse(BaseModel):

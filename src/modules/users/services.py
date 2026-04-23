@@ -7,6 +7,10 @@ from src.modules.users import repository
 from src.modules.users.models import User
 
 
+async def get_by_id(db: AsyncSession, user_id: uuid.UUID) -> User | None:
+    return await repository.get_by_id(db, user_id)
+
+
 async def get_by_email(db: AsyncSession, email: str) -> User | None:
     return await repository.get_by_email(db, email)
 

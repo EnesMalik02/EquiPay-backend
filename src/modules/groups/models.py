@@ -58,6 +58,9 @@ class GroupMember(Base):
     role: Mapped[str] = mapped_column(
         String(20), server_default=text("'member'"), nullable=False
     )
+    status: Mapped[str] = mapped_column(
+        String(20), server_default=text("'active'"), nullable=False
+    )
     joined_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
