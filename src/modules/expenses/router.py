@@ -106,27 +106,13 @@ async def list_group_expenses(
 async def list_my_split_expenses(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    status: str = Query(default="all", pattern="^(all|pending|paid)$"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     expenses = await services.get_user_assigned_expenses(
-        db, current_user.id, limit=limit, offset=offset
+        db, current_user.id, limit=limit, offset=offset, status=status
     )
-    return [_build_with_my_split(exp, current_user.id) for exp in expenses]
-
-
-@router.get(
-    "/me/recent",
-    response_model=list[ExpenseWithMySplitResponse],
-    summary="Kullanıcının son harcamaları (tüm gruplar)",
-    dependencies=[Depends(rate_limit("60/minute"))],
-)
-async def list_recent_my_expenses(
-    limit: int = Query(default=10, ge=1, le=50),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    expenses = await services.get_recent_user_expenses(db, current_user.id, limit=limit)
     return [_build_with_my_split(exp, current_user.id) for exp in expenses]
 
 

@@ -141,17 +141,9 @@ async def get_user_assigned_expenses(
     *,
     limit: int = 20,
     offset: int = 0,
+    status: str = "all",
 ) -> list[Expense]:
-    return await repository.get_user_assigned(db, user_id, limit=limit, offset=offset)
-
-
-async def get_recent_user_expenses(
-    db: AsyncSession,
-    user_id: uuid.UUID,
-    *,
-    limit: int = 10,
-) -> list[Expense]:
-    return await repository.get_recent_for_user(db, user_id, limit=limit)
+    return await repository.get_user_assigned(db, user_id, limit=limit, offset=offset, status=status)
 
 
 async def pay_split(
