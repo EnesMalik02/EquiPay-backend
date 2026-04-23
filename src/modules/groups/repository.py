@@ -59,6 +59,17 @@ async def get_member(
     return result.scalars().first()
 
 
+async def get_member_with_user(
+    db: AsyncSession, member_id: uuid.UUID
+) -> GroupMember | None:
+    result = await db.execute(
+        select(GroupMember)
+        .options(selectinload(GroupMember.user))
+        .where(GroupMember.id == member_id)
+    )
+    return result.scalars().first()
+
+
 async def get_existing_membership(
     db: AsyncSession, group_id: uuid.UUID, user_id: uuid.UUID
 ) -> GroupMember | None:

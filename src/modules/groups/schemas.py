@@ -57,3 +57,23 @@ class GroupMemberResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class GroupMemberAddResponse(BaseModel):
+    user_id: uuid.UUID
+    username: str | None = None
+    display_name: str | None = None
+    role: str
+
+    class Config:
+        from_attributes = True
+
+
+class GroupMemberListResponse(BaseModel):
+    user_id: uuid.UUID
+    username: str | None = None
+    display_name: str | None = None
+    role: str
+
+    class Config:
+        from_attributes = True

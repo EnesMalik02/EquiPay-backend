@@ -97,14 +97,12 @@ async def add_member(
         existing.left_at = None
         existing.role = role
         await db.flush()
-        await db.refresh(existing)
-        return existing
+        return await repository.get_member_with_user(db, existing.id)
 
     member = GroupMember(group_id=group_id, user_id=user_id, role=role)
     db.add(member)
     await db.flush()
-    await db.refresh(member)
-    return member
+    return await repository.get_member_with_user(db, member.id)
 
 
 async def get_group_members(db: AsyncSession, group_id: uuid.UUID) -> list[GroupMember]:

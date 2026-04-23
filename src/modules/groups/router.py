@@ -13,6 +13,8 @@ from src.modules.groups.schemas import (
     GroupMemberAdd,
     GroupMemberRoleUpdate,
     GroupMemberResponse,
+    GroupMemberAddResponse,
+    GroupMemberListResponse,
 )
 from src.modules.groups import services
 
@@ -184,7 +186,7 @@ async def update_member_role(
 
 @router.post(
     "/{group_id}/members",
-    response_model=GroupMemberResponse,
+    response_model=GroupMemberAddResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Gruba üye ekle",
     dependencies=[Depends(rate_limit("20/minute"))],
@@ -211,7 +213,7 @@ async def add_member(
 
 @router.get(
     "/{group_id}/members",
-    response_model=list[GroupMemberResponse],
+    response_model=list[GroupMemberListResponse],
     summary="Grup üyelerini listele",
     dependencies=[Depends(rate_limit("60/minute"))],
 )
