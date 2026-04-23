@@ -17,9 +17,6 @@ RUN uv sync --frozen --no-dev
 EXPOSE 10000
 
 CMD ["sh", "-c", "\
-    echo '>>> Running migrations...' && \
-    uv run alembic upgrade head && \
-    echo '>>> Starting server...' && \
     exec uv run gunicorn src.main:app \
         --workers ${WEB_CONCURRENCY:-2} \
         --worker-class uvicorn.workers.UvicornWorker \
