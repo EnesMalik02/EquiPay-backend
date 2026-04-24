@@ -33,7 +33,6 @@ def _build_with_my_split(exp: Expense, user_id: uuid.UUID) -> ExpenseWithMySplit
         title=exp.title,
         amount=exp.amount,
         currency=exp.currency,
-        notes=exp.notes,
         expense_date=exp.expense_date,
         created_at=exp.created_at,
         is_fully_paid=exp.is_fully_paid,

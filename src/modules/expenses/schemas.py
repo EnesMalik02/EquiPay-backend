@@ -114,7 +114,6 @@ class ExpenseWithMySplitResponse(BaseModel):
     title: str
     amount: Decimal
     currency: str
-    notes: str | None = None
     expense_date: date | None = None
     created_at: datetime | None = None
     is_fully_paid: bool
