@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 
 
 class UserResponse(BaseModel):
@@ -23,6 +23,13 @@ class UpdateProfileRequest(BaseModel):
     display_name: str | None = None
     username: str | None = None
     phone: str | None = None
+
+    @field_validator("username")
+    @classmethod
+    def username_no_spaces(cls, v: str | None) -> str | None:
+        if v is not None and " " in v:
+            raise ValueError("Kullanıcı adı boşluk içeremez.")
+        return v
 
 
 class UserSearchResult(BaseModel):

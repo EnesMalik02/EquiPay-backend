@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 
 
 class UserRegisterRequest(BaseModel):
@@ -6,6 +6,13 @@ class UserRegisterRequest(BaseModel):
     password: str
     phone: str
     username: str
+
+    @field_validator("username")
+    @classmethod
+    def username_no_spaces(cls, v: str) -> str:
+        if " " in v:
+            raise ValueError("Kullanıcı adı boşluk içeremez.")
+        return v
 
 
 class UserLoginRequest(BaseModel):
