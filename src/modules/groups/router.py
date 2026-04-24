@@ -209,6 +209,7 @@ async def add_member(
             invited_by=current_user.id,
             phone=data.phone,
             email=data.email,
+            username=data.username,
             role=data.role,
         )
     except LookupError as exc:

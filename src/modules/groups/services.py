@@ -75,6 +75,7 @@ async def add_member(
     invited_by: uuid.UUID,
     phone: str | None = None,
     email: str | None = None,
+    username: str | None = None,
     user_id: uuid.UUID | None = None,
     role: str = "member",
 ) -> GroupMember:
@@ -87,10 +88,14 @@ async def add_member(
             user = await users_services.get_by_phone(db, phone)
             if not user:
                 raise LookupError("Bu telefon numarasına kayıtlı kullanıcı bulunamadı.")
-        else:
+        elif email:
             user = await users_services.get_by_email(db, email)
             if not user:
                 raise LookupError("Bu email adresine kayıtlı kullanıcı bulunamadı.")
+        else:
+            user = await users_services.get_by_username(db, username)
+            if not user:
+                raise LookupError("Bu kullanıcı adına kayıtlı kullanıcı bulunamadı.")
         user_id = user.id
 
     existing = await repository.get_existing_membership(db, group_id, user_id)
