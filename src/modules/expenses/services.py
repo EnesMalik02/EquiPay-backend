@@ -152,7 +152,12 @@ async def pay_split(
     *,
     paid_amount: Decimal | None = None,
 ) -> ExpenseSplit:
-    split.paid_amount = paid_amount if paid_amount is not None else split.owed_amount
+    remaining = split.owed_amount - split.paid_amount
+    if remaining <= 0:
+        return split
+    if paid_amount is not None and paid_amount > remaining:
+        raise ValueError(f"Ödeme tutarı kalan borçtan ({remaining}) fazla olamaz.")
+    split.paid_amount += paid_amount if paid_amount is not None else remaining
     await db.flush()
     await db.refresh(split)
     return split

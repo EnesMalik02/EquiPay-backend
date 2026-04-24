@@ -48,7 +48,14 @@ class ExpenseUpdate(BaseModel):
 
 
 class ExpenseSplitPayRequest(BaseModel):
-    paid_amount: Decimal | None = None
+    paid_amount: Decimal | None = None  # None = remaining full amount
+
+    @field_validator("paid_amount")
+    @classmethod
+    def amount_must_be_positive(cls, v: Decimal | None) -> Decimal | None:
+        if v is not None and v <= 0:
+            raise ValueError("Ödeme tutarı sıfırdan büyük olmalıdır.")
+        return v
 
 
 # ── Response schemas ──
