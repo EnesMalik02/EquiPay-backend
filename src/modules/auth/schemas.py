@@ -1,4 +1,7 @@
+import re
 from pydantic import BaseModel, EmailStr, field_validator
+
+USERNAME_RE = re.compile(r'^[a-z0-9_]+$')
 
 
 class UserRegisterRequest(BaseModel):
@@ -9,9 +12,9 @@ class UserRegisterRequest(BaseModel):
 
     @field_validator("username")
     @classmethod
-    def username_no_spaces(cls, v: str) -> str:
-        if " " in v:
-            raise ValueError("Kullanıcı adı boşluk içeremez.")
+    def username_valid(cls, v: str) -> str:
+        if not USERNAME_RE.match(v):
+            raise ValueError("Kullanıcı adı yalnızca küçük İngilizce harf, rakam ve alt çizgi içerebilir.")
         return v
 
 
