@@ -27,10 +27,10 @@ async def update_profile(
     )
 
 
-@router.get("/search", response_model=list[UserSearchResult], summary="Email ile kullanıcı ara", dependencies=[Depends(rate_limit("30/minute"))])
+@router.get("/search", response_model=list[UserSearchResult], summary="Kullanıcı ara (email, kullanıcı adı veya telefon)", dependencies=[Depends(rate_limit("30/minute"))])
 async def search_users(
-    email: str = Query(..., min_length=2),
+    q: str = Query(..., min_length=2),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await services.search_by_email(db, email, exclude_id=current_user.id)
+    return await services.search_users(db, q, exclude_id=current_user.id)

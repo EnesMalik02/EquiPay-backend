@@ -80,3 +80,22 @@ async def search_by_email(
         .limit(limit)
     )
     return list(result.scalars().all())
+
+
+async def search_users(
+    db: AsyncSession, q: str, *, exclude_id: uuid.UUID, limit: int = 10
+) -> list[User]:
+    result = await db.execute(
+        select(User)
+        .where(
+            or_(
+                User.email.ilike(f"%{q}%"),
+                User.username.ilike(f"%{q}%"),
+                User.phone.ilike(f"%{q}%"),
+            ),
+            User.id != exclude_id,
+            User.deleted_at.is_(None),
+        )
+        .limit(limit)
+    )
+    return list(result.scalars().all())

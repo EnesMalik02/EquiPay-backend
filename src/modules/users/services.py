@@ -29,6 +29,12 @@ async def search_by_email(
     return await repository.search_by_email(db, email, exclude_id=exclude_id, limit=limit)
 
 
+async def search_users(
+    db: AsyncSession, q: str, *, exclude_id: uuid.UUID, limit: int = 10
+) -> list[User]:
+    return await repository.search_users(db, q, exclude_id=exclude_id, limit=limit)
+
+
 async def update_profile(
     db: AsyncSession,
     user: User,
