@@ -17,12 +17,13 @@ from src.config import settings  # pydantic-settings ile yönetilen config
 engine = create_async_engine(
     settings.DATABASE_URL,
     pool_size=10,
-    max_overflow=20,
+    max_overflow=10,
     pool_pre_ping=True,        # bağlantı kopuksa otomatik yenile
     pool_recycle=1800,         # 30 dk'da bir bağlantıyı yenile
     echo=settings.DB_ECHO,    # prod'da False olmalı
     connect_args={
         "statement_cache_size": 0,  # ⚠️ Supabase PgBouncer (port 6543) için zorunlu
+        "ssl": "require",
     },
 )
 
