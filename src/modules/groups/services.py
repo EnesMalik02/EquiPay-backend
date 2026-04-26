@@ -45,6 +45,13 @@ async def get_user_group_ids(db: AsyncSession, user_id: uuid.UUID) -> list[uuid.
     return await repository.get_user_group_ids(db, user_id)
 
 
+async def get_pending_invitation_group_ids(
+    db: AsyncSession, user_id: uuid.UUID
+) -> list[uuid.UUID]:
+    """Kullanıcının yanıtlamadığı davetlerin group_id listesini döndürür."""
+    return await repository.get_pending_invitation_group_ids(db, user_id)
+
+
 async def update_group(
     db: AsyncSession,
     group: Group,

@@ -7,7 +7,7 @@ from src.core.database import get_db
 from src.core.ratelimit import rate_limit
 from src.core.security import get_current_user
 from src.modules.users.models import User
-from src.modules.notifications import repository
+from src.modules.notifications import repository, service
 from src.modules.notifications.schemas import NotificationResponse
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
@@ -23,7 +23,7 @@ async def list_notifications(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await repository.get_unread(db, current_user.id)
+    return await service.get_active_notifications(db, current_user.id)
 
 
 @router.patch(

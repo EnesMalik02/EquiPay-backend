@@ -104,6 +104,20 @@ async def get_existing_membership(
     return result.scalars().first()
 
 
+async def get_pending_invitation_group_ids(
+    db: AsyncSession, user_id: uuid.UUID
+) -> list[uuid.UUID]:
+    """Kullanıcının henüz yanıtlamadığı davetlerin group_id listesini döndürür."""
+    result = await db.execute(
+        select(GroupMember.group_id).where(
+            GroupMember.user_id == user_id,
+            GroupMember.status == "pending",
+            GroupMember.left_at.is_(None),
+        )
+    )
+    return list(result.scalars().all())
+
+
 async def get_active_member_count(db: AsyncSession, group_id: uuid.UUID) -> int:
     result = await db.execute(
         select(func.count())

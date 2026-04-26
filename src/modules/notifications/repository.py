@@ -28,6 +28,19 @@ async def get_unread(db: AsyncSession, user_id: uuid.UUID) -> list[Notification]
     return list(result.scalars().all())
 
 
+async def get_read_by_type(
+    db: AsyncSession, user_id: uuid.UUID, type: str
+) -> list[Notification]:
+    result = await db.execute(
+        select(Notification).where(
+            Notification.user_id == user_id,
+            Notification.type == type,
+            Notification.is_read.is_(True),
+        )
+    )
+    return list(result.scalars().all())
+
+
 async def mark_read(db: AsyncSession, notification_id: uuid.UUID, user_id: uuid.UUID) -> bool:
     result = await db.execute(
         select(Notification).where(
