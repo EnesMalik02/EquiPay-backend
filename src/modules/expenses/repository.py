@@ -51,7 +51,7 @@ async def get_user_assigned(
     result = await db.execute(
         select(Expense)
         .join(ExpenseSplit, ExpenseSplit.expense_id == Expense.id)
-        .options(selectinload(Expense.splits), selectinload(Expense.group))
+        .options(selectinload(Expense.splits), selectinload(Expense.group), selectinload(Expense.payer))
         .where(*filters)
         .order_by(Expense.expense_date.desc(), Expense.created_at.desc())
         .limit(limit)

@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,7 +13,9 @@ from src.modules.expenses.schemas import (
     ExpenseResponse,
     ExpenseDetailResponse,
     ExpenseWithMySplitResponse,
-    MySplitSummary,
+    GroupBrief,
+    PaidByBrief,
+    UserAmount,
     ExpenseSplitPayRequest,
     ExpenseSplitResponse,
 )
@@ -24,23 +27,21 @@ router = APIRouter(prefix="/expenses", tags=["Expenses"])
 
 
 def _build_with_my_split(exp: Expense, user_id: uuid.UUID) -> ExpenseWithMySplitResponse:
-    my_split_orm = next((s for s in exp.splits if s.user_id == user_id), None)
+    my_split = next((s for s in exp.splits if s.user_id == user_id), None)
+    direction = "credit" if exp.paid_by == user_id else "debit"
+    outstanding = (my_split.owed_amount - my_split.paid_amount) if my_split else Decimal("0")
+    payer_name = exp.payer.display_name or exp.payer.username if exp.payer else ""
     return ExpenseWithMySplitResponse(
         id=exp.id,
-        group_id=exp.group_id,
-        group_name=exp.group.name if exp.group else None,
-        paid_by=exp.paid_by,
         title=exp.title,
-        amount=exp.amount,
-        currency=exp.currency,
-        expense_date=exp.expense_date,
+        group=GroupBrief(group_id=exp.group.id, name=exp.group.name) if exp.group else None,
+        paid_by=PaidByBrief(name=payer_name),
         created_at=exp.created_at,
-        is_fully_paid=exp.is_fully_paid,
-        my_split=MySplitSummary(
-            id=my_split_orm.id,
-            owed_amount=my_split_orm.owed_amount,
-            paid_amount=my_split_orm.paid_amount,
-        ) if my_split_orm else None,
+        user_amount=UserAmount(
+            direction=direction,
+            amount=outstanding,
+            currency=exp.currency,
+        ),
     )
 
 

@@ -72,14 +72,19 @@ class ExpenseSplitResponse(BaseModel):
         from_attributes = True
 
 
-class MySplitSummary(BaseModel):
-    """Kullanıcının kendi payı özeti — liste görünümleri için."""
-    id: uuid.UUID
-    owed_amount: Decimal
-    paid_amount: Decimal
+class GroupBrief(BaseModel):
+    group_id: uuid.UUID
+    name: str
 
-    class Config:
-        from_attributes = True
+
+class PaidByBrief(BaseModel):
+    name: str
+
+
+class UserAmount(BaseModel):
+    direction: str  # "debit" | "credit"
+    amount: Decimal
+    currency: str
 
 
 class ExpenseResponse(BaseModel):
@@ -106,18 +111,9 @@ class ExpenseDetailResponse(ExpenseResponse):
 
 
 class ExpenseWithMySplitResponse(BaseModel):
-    """Kullanıcının split'i olan harcama özeti — home ve settlements için."""
     id: uuid.UUID
-    group_id: uuid.UUID | None = None
-    group_name: str | None = None
-    paid_by: uuid.UUID
     title: str
-    amount: Decimal
-    currency: str
-    expense_date: date | None = None
-    created_at: datetime | None = None
-    is_fully_paid: bool
-    my_split: MySplitSummary | None = None
-
-    class Config:
-        from_attributes = True
+    group: GroupBrief | None
+    paid_by: PaidByBrief
+    created_at: datetime | None
+    user_amount: UserAmount
