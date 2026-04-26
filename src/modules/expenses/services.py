@@ -224,3 +224,55 @@ async def has_unsettled_balance(db: AsyncSession, group_id: uuid.UUID) -> bool:
         )
     )
     return (result.scalar() or Decimal("0")) > Decimal("0")
+
+
+async def get_user_balances_for_groups(
+    db: AsyncSession, group_ids: list[uuid.UUID], user_id: uuid.UUID
+) -> dict[uuid.UUID, Decimal]:
+    """Returns balance (receivable - debt) per group_id for the given user."""
+    if not group_ids:
+        return {}
+
+    debt_result = await db.execute(
+        select(
+            Expense.group_id,
+            func.coalesce(
+                func.sum(ExpenseSplit.owed_amount - ExpenseSplit.paid_amount),
+                Decimal("0"),
+            ).label("debt"),
+        )
+        .join(Expense, Expense.id == ExpenseSplit.expense_id)
+        .where(
+            Expense.group_id.in_(group_ids),
+            Expense.deleted_at.is_(None),
+            ExpenseSplit.user_id == user_id,
+            ExpenseSplit.owed_amount > ExpenseSplit.paid_amount,
+        )
+        .group_by(Expense.group_id)
+    )
+    debts: dict[uuid.UUID, Decimal] = {row.group_id: row.debt for row in debt_result}
+
+    recv_result = await db.execute(
+        select(
+            Expense.group_id,
+            func.coalesce(
+                func.sum(ExpenseSplit.owed_amount - ExpenseSplit.paid_amount),
+                Decimal("0"),
+            ).label("recv"),
+        )
+        .join(Expense, Expense.id == ExpenseSplit.expense_id)
+        .where(
+            Expense.group_id.in_(group_ids),
+            Expense.deleted_at.is_(None),
+            Expense.paid_by == user_id,
+            ExpenseSplit.user_id != user_id,
+            ExpenseSplit.owed_amount > ExpenseSplit.paid_amount,
+        )
+        .group_by(Expense.group_id)
+    )
+    receivables: dict[uuid.UUID, Decimal] = {row.group_id: row.recv for row in recv_result}
+
+    return {
+        gid: receivables.get(gid, Decimal("0")) - debts.get(gid, Decimal("0"))
+        for gid in group_ids
+    }

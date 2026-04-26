@@ -40,6 +40,44 @@ async def get_user_groups(db: AsyncSession, user_id: uuid.UUID) -> list[Group]:
     return await repository.get_user_groups(db, user_id)
 
 
+async def get_user_groups_with_stats(
+    db: AsyncSession, user_id: uuid.UUID
+) -> list[dict]:
+    groups = await repository.get_user_groups(db, user_id)
+    if not groups:
+        return []
+    group_ids = [g.id for g in groups]
+    member_counts = await repository.get_active_member_counts(db, group_ids)
+    balances = await expenses_services.get_user_balances_for_groups(db, group_ids, user_id)
+    return [
+        {
+            "id": g.id,
+            "name": g.name,
+            "description": g.description,
+            "member_count": member_counts.get(g.id, 0),
+            "balance": balances.get(g.id, Decimal("0")),
+        }
+        for g in groups
+    ]
+
+
+async def get_group_with_stats(
+    db: AsyncSession, group_id: uuid.UUID, user_id: uuid.UUID
+) -> dict | None:
+    group = await repository.get_by_id(db, group_id)
+    if not group:
+        return None
+    member_count = await repository.get_active_member_count(db, group_id)
+    balances = await expenses_services.get_user_balances_for_groups(db, [group_id], user_id)
+    return {
+        "id": group.id,
+        "name": group.name,
+        "description": group.description,
+        "member_count": member_count,
+        "balance": balances.get(group_id, Decimal("0")),
+    }
+
+
 async def get_user_group_ids(db: AsyncSession, user_id: uuid.UUID) -> list[uuid.UUID]:
     """Kullanıcının aktif üyesi olduğu grup id'lerini döndürür."""
     return await repository.get_user_group_ids(db, user_id)

@@ -129,3 +129,18 @@ async def get_active_member_count(db: AsyncSession, group_id: uuid.UUID) -> int:
         )
     )
     return result.scalar() or 0
+
+
+async def get_active_member_counts(
+    db: AsyncSession, group_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, int]:
+    result = await db.execute(
+        select(GroupMember.group_id, func.count().label("cnt"))
+        .where(
+            GroupMember.group_id.in_(group_ids),
+            GroupMember.left_at.is_(None),
+            GroupMember.status == "active",
+        )
+        .group_by(GroupMember.group_id)
+    )
+    return {row.group_id: row.cnt for row in result}

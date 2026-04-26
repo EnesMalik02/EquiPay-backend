@@ -10,6 +10,7 @@ from src.modules.groups.schemas import (
     GroupCreate,
     GroupUpdate,
     GroupResponse,
+    GroupWithStatsResponse,
     GroupMemberAdd,
     GroupMemberRoleUpdate,
     GroupMemberResponse,
@@ -43,21 +44,21 @@ async def create_group(
     return group
 
 
-@router.get("", response_model=list[GroupResponse], summary="Kullanıcının gruplarını listele", dependencies=[Depends(rate_limit("60/minute"))])
+@router.get("", response_model=list[GroupWithStatsResponse], summary="Kullanıcının gruplarını listele", dependencies=[Depends(rate_limit("60/minute"))])
 async def list_my_groups(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await services.get_user_groups(db, current_user.id)
+    return await services.get_user_groups_with_stats(db, current_user.id)
 
 
-@router.get("/{group_id}", response_model=GroupResponse, summary="Grup detayı", dependencies=[Depends(rate_limit("60/minute"))])
+@router.get("/{group_id}", response_model=GroupWithStatsResponse, summary="Grup detayı", dependencies=[Depends(rate_limit("60/minute"))])
 async def get_group(
     group_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    group = await services.get_group_by_id(db, group_id)
+    group = await services.get_group_with_stats(db, group_id, current_user.id)
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
     return group
