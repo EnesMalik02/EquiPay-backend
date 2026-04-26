@@ -129,6 +129,7 @@ def _build_expense_full_detail(exp: Expense) -> ExpenseFullDetailResponse:
         user_name = (user.display_name or user.username) if user else ""
         remaining = s.owed_amount - s.paid_amount
         splits.append(SplitDetailItem(
+            id=s.id,
             user=SplitUserBrief(
                 id=s.user_id,
                 name=user_name,

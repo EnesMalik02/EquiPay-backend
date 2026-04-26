@@ -129,6 +129,7 @@ class SplitUserBrief(BaseModel):
 
 
 class SplitDetailItem(BaseModel):
+    id: uuid.UUID
     user: SplitUserBrief
     owed_amount: Decimal
     paid_amount: Decimal
