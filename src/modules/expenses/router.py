@@ -11,10 +11,14 @@ from src.modules.expenses.schemas import (
     ExpenseCreate,
     ExpenseUpdate,
     ExpenseResponse,
-    ExpenseDetailResponse,
     ExpenseWithMySplitResponse,
+    ExpenseFullDetailResponse,
     GroupBrief,
+    GroupDetail,
     PaidByBrief,
+    PaidByDetail,
+    SplitUserBrief,
+    SplitDetailItem,
     UserAmount,
     ExpenseSplitPayRequest,
     ExpenseSplitResponse,
@@ -117,9 +121,42 @@ async def list_my_split_expenses(
     return [_build_with_my_split(exp, current_user.id) for exp in expenses]
 
 
+def _build_expense_full_detail(exp: Expense) -> ExpenseFullDetailResponse:
+    payer_name = exp.payer.display_name or exp.payer.username if exp.payer else ""
+    splits = []
+    for s in exp.splits:
+        user = s.user
+        user_name = (user.display_name or user.username) if user else ""
+        remaining = s.owed_amount - s.paid_amount
+        splits.append(SplitDetailItem(
+            user=SplitUserBrief(
+                id=s.user_id,
+                name=user_name,
+                avatar_url=user.avatar_url if user else None,
+            ),
+            owed_amount=s.owed_amount,
+            paid_amount=s.paid_amount,
+            remaining_amount=max(remaining, Decimal("0")),
+            status="paid" if s.paid_amount >= s.owed_amount else "pending",
+        ))
+    return ExpenseFullDetailResponse(
+        id=exp.id,
+        group=GroupDetail(id=exp.group.id, name=exp.group.name) if exp.group else None,
+        paid_by=PaidByDetail(id=exp.paid_by, name=payer_name),
+        title=exp.title,
+        amount=exp.amount,
+        currency=exp.currency,
+        notes=exp.notes,
+        expense_date=exp.expense_date,
+        split_type=exp.split_type,
+        created_at=exp.created_at,
+        splits=splits,
+    )
+
+
 @router.get(
     "/{expense_id}",
-    response_model=ExpenseDetailResponse,
+    response_model=ExpenseFullDetailResponse,
     summary="Masraf detayı",
     dependencies=[Depends(rate_limit("60/minute"))],
 )
@@ -129,7 +166,8 @@ async def get_expense(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        return await expense_queries.get_expense(db, expense_id, current_user.id)
+        exp = await expense_queries.get_expense(db, expense_id, current_user.id)
+        return _build_expense_full_detail(exp)
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except PermissionError as exc:

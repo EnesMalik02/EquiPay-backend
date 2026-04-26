@@ -10,7 +10,11 @@ from src.modules.expenses.models import Expense, ExpenseSplit
 async def get_by_id(db: AsyncSession, expense_id: uuid.UUID) -> Expense | None:
     result = await db.execute(
         select(Expense)
-        .options(selectinload(Expense.splits))
+        .options(
+            selectinload(Expense.splits).selectinload(ExpenseSplit.user),
+            selectinload(Expense.group),
+            selectinload(Expense.payer),
+        )
         .where(Expense.id == expense_id, Expense.deleted_at.is_(None))
     )
     return result.scalars().first()

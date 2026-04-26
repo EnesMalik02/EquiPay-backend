@@ -110,6 +110,46 @@ class ExpenseDetailResponse(ExpenseResponse):
     splits: list[ExpenseSplitResponse] = []
 
 
+# ── New detail schemas ──
+
+class GroupDetail(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class PaidByDetail(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class SplitUserBrief(BaseModel):
+    id: uuid.UUID
+    name: str
+    avatar_url: str | None = None
+
+
+class SplitDetailItem(BaseModel):
+    user: SplitUserBrief
+    owed_amount: Decimal
+    paid_amount: Decimal
+    remaining_amount: Decimal
+    status: str  # "paid" | "pending"
+
+
+class ExpenseFullDetailResponse(BaseModel):
+    id: uuid.UUID
+    group: GroupDetail | None
+    paid_by: PaidByDetail
+    title: str
+    amount: Decimal
+    currency: str
+    notes: str | None = None
+    expense_date: date | None = None
+    split_type: str
+    created_at: datetime | None = None
+    splits: list[SplitDetailItem] = []
+
+
 class ExpenseWithMySplitResponse(BaseModel):
     id: uuid.UUID
     title: str
