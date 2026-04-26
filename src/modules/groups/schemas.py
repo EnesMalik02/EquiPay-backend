@@ -84,6 +84,7 @@ class GroupMemberListResponse(BaseModel):
     username: str | None = None
     display_name: str | None = None
     role: str
+    status: str
 
     class Config:
         from_attributes = True

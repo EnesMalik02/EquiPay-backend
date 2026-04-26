@@ -46,7 +46,7 @@ async def get_members(db: AsyncSession, group_id: uuid.UUID) -> list[GroupMember
         .where(
             GroupMember.group_id == group_id,
             GroupMember.left_at.is_(None),
-            GroupMember.status == "active",
+            GroupMember.status.in_(["active", "pending"]),
         )
     )
     return list(result.scalars().all())
