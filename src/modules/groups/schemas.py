@@ -28,6 +28,7 @@ class GroupResponse(BaseModel):
 class GroupWithStatsResponse(GroupResponse):
     member_count: int
     balance: Decimal
+    updated_at: datetime | None = None
 
 
 # ── GroupMember ──

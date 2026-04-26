@@ -56,6 +56,7 @@ async def get_user_groups_with_stats(
             "description": g.description,
             "member_count": member_counts.get(g.id, 0),
             "balance": balances.get(g.id, Decimal("0")),
+            "updated_at": g.updated_at,
         }
         for g in groups
     ]
@@ -75,6 +76,7 @@ async def get_group_with_stats(
         "description": group.description,
         "member_count": member_count,
         "balance": balances.get(group_id, Decimal("0")),
+        "updated_at": group.updated_at,
     }
 
 
