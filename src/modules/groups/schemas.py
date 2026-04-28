@@ -9,6 +9,7 @@ from pydantic import BaseModel, EmailStr, model_validator
 class GroupCreate(BaseModel):
     name: str
     description: str | None = None
+    currency_code: str = "TRY"
 
 
 class GroupUpdate(BaseModel):
@@ -20,6 +21,7 @@ class GroupResponse(BaseModel):
     id: uuid.UUID
     name: str
     description: str | None = None
+    currency_code: str
 
     class Config:
         from_attributes = True

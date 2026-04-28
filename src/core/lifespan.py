@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 
+import src.core.registry  # noqa: F401 — registers all models with Base.metadata
 from src.core.database import Base, engine
 from src.core.redis import close_redis, connect_redis
 

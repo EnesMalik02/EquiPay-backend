@@ -19,6 +19,9 @@ class Group(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    currency_code: Mapped[str] = mapped_column(
+        String(10), ForeignKey("currencies.code"), nullable=False, default="TRY"
+    )
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )

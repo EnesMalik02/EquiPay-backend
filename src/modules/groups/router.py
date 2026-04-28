@@ -40,6 +40,7 @@ async def create_group(
         name=data.name,
         description=data.description,
         created_by=current_user.id,
+        currency_code=data.currency_code,
     )
     return group
 

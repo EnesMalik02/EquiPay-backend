@@ -20,8 +20,9 @@ async def create_group(
     name: str,
     description: str | None,
     created_by: uuid.UUID,
+    currency_code: str = "TRY",
 ) -> Group:
-    group = Group(name=name, description=description, created_by=created_by)
+    group = Group(name=name, description=description, created_by=created_by, currency_code=currency_code)
     db.add(group)
     await db.flush()
 
@@ -54,6 +55,7 @@ async def get_user_groups_with_stats(
             "id": g.id,
             "name": g.name,
             "description": g.description,
+            "currency_code": g.currency_code,
             "member_count": member_counts.get(g.id, 0),
             "balance": balances.get(g.id, Decimal("0")),
             "updated_at": g.updated_at,
@@ -74,6 +76,7 @@ async def get_group_with_stats(
         "id": group.id,
         "name": group.name,
         "description": group.description,
+        "currency_code": group.currency_code,
         "member_count": member_count,
         "balance": balances.get(group_id, Decimal("0")),
         "updated_at": group.updated_at,
