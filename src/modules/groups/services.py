@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.currencies.formatting import format_balance
 from src.modules.expenses import services as expenses_services
 from src.modules.friendships import repository as friendships_repository
 from src.modules.groups import repository
@@ -50,18 +51,21 @@ async def get_user_groups_with_stats(
     group_ids = [g.id for g in groups]
     member_counts = await repository.get_active_member_counts(db, group_ids)
     balances = await expenses_services.get_user_balances_for_groups(db, group_ids, user_id)
-    return [
-        {
+    result = []
+    for g in groups:
+        raw = balances.get(g.id, Decimal("0"))
+        formatted, direction = format_balance(raw, g.currency_code)
+        result.append({
             "id": g.id,
             "name": g.name,
             "description": g.description,
             "currency_code": g.currency_code,
             "member_count": member_counts.get(g.id, 0),
-            "balance": balances.get(g.id, Decimal("0")),
+            "balance_formatted": formatted,
+            "balance_direction": direction,
             "updated_at": g.updated_at,
-        }
-        for g in groups
-    ]
+        })
+    return result
 
 
 async def get_group_with_stats(
@@ -72,13 +76,16 @@ async def get_group_with_stats(
         return None
     member_count = await repository.get_active_member_count(db, group_id)
     balances = await expenses_services.get_user_balances_for_groups(db, [group_id], user_id)
+    raw = balances.get(group_id, Decimal("0"))
+    formatted, direction = format_balance(raw, group.currency_code)
     return {
         "id": group.id,
         "name": group.name,
         "description": group.description,
         "currency_code": group.currency_code,
         "member_count": member_count,
-        "balance": balances.get(group_id, Decimal("0")),
+        "balance_formatted": formatted,
+        "balance_direction": direction,
         "updated_at": group.updated_at,
     }
 

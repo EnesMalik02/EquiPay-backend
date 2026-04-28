@@ -1,6 +1,5 @@
 import uuid
 from datetime import datetime
-from decimal import Decimal
 from pydantic import BaseModel, EmailStr, model_validator
 
 
@@ -29,7 +28,8 @@ class GroupResponse(BaseModel):
 
 class GroupWithStatsResponse(GroupResponse):
     member_count: int
-    balance: Decimal
+    balance_formatted: str
+    balance_direction: str
     updated_at: datetime | None = None
 
 
