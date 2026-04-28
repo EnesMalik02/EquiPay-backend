@@ -41,6 +41,7 @@ def _build_with_my_split(exp: Expense, user_id: uuid.UUID) -> ExpenseWithMySplit
         group=GroupBrief(group_id=exp.group.id, name=exp.group.name) if exp.group else None,
         paid_by=PaidByBrief(name=payer_name),
         created_at=exp.created_at,
+        updated_at=my_split.updated_at if my_split else None,
         user_amount=UserAmount(
             direction=direction,
             amount=outstanding,

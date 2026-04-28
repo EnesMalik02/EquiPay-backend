@@ -102,6 +102,9 @@ class ExpenseSplit(Base):
     created_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
 
     __table_args__ = (
         UniqueConstraint("expense_id", "user_id", name="uq_expense_splits_expense_user"),

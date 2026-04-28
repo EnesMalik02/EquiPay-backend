@@ -157,4 +157,5 @@ class ExpenseWithMySplitResponse(BaseModel):
     group: GroupBrief | None
     paid_by: PaidByBrief
     created_at: datetime | None
+    updated_at: datetime | None
     user_amount: UserAmount

@@ -158,6 +158,7 @@ async def pay_split(
     if paid_amount is not None and paid_amount > remaining:
         raise ValueError(f"Ödeme tutarı kalan borçtan ({remaining}) fazla olamaz.")
     split.paid_amount += paid_amount if paid_amount is not None else remaining
+    split.updated_at = datetime.now(timezone.utc)
     await db.flush()
     await db.refresh(split)
     return split
