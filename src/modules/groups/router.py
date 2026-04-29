@@ -6,6 +6,7 @@ from src.core.database import get_db
 from src.core.ratelimit import rate_limit
 from src.core.security import get_current_user
 from src.modules.users.models import User
+from src.core.pagination import CursorPage
 from src.modules.groups.schemas import (
     GroupCreate,
     GroupUpdate,
@@ -45,12 +46,15 @@ async def create_group(
     return group
 
 
-@router.get("", response_model=list[GroupWithStatsResponse], summary="Kullanıcının gruplarını listele", dependencies=[Depends(rate_limit("60/minute"))])
+@router.get("", response_model=CursorPage[GroupWithStatsResponse], summary="Kullanıcının gruplarını listele", dependencies=[Depends(rate_limit("60/minute"))])
 async def list_my_groups(
+    cursor: str | None = None,
+    limit: int = 30,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await services.get_user_groups_with_stats(db, current_user.id)
+    limit = max(1, min(limit, 30))
+    return await services.get_user_groups_with_stats(db, current_user.id, limit=limit, cursor=cursor)
 
 
 @router.get("/{group_id}", response_model=GroupWithStatsResponse, summary="Grup detayı", dependencies=[Depends(rate_limit("60/minute"))])

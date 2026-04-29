@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.pagination import encode_cursor, decode_cursor
 from src.modules.currencies.formatting import format_balance
 from src.modules.expenses import services as expenses_services
 from src.modules.friendships import repository as friendships_repository
@@ -43,19 +44,42 @@ async def get_user_groups(db: AsyncSession, user_id: uuid.UUID) -> list[Group]:
 
 
 async def get_user_groups_with_stats(
-    db: AsyncSession, user_id: uuid.UUID
-) -> list[dict]:
-    groups = await repository.get_user_groups(db, user_id)
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    limit: int = 30,
+    cursor: str | None = None,
+) -> dict:
+    cursor_updated_at = None
+    cursor_id = None
+    if cursor:
+        decoded = decode_cursor(cursor)
+        if decoded and len(decoded) == 2:
+            try:
+                cursor_updated_at = datetime.fromisoformat(decoded[0])
+                cursor_id = uuid.UUID(decoded[1])
+            except (ValueError, AttributeError):
+                pass
+
+    groups = await repository.get_user_groups(
+        db, user_id, limit=limit + 1,
+        cursor_updated_at=cursor_updated_at, cursor_id=cursor_id
+    )
+    has_more = len(groups) > limit
+    if has_more:
+        groups = groups[:limit]
+
     if not groups:
-        return []
+        return {"items": [], "next_cursor": None, "has_more": False}
+
     group_ids = [g.id for g in groups]
     member_counts = await repository.get_active_member_counts(db, group_ids)
     balances = await expenses_services.get_user_balances_for_groups(db, group_ids, user_id)
-    result = []
+
+    items = []
     for g in groups:
         raw = balances.get(g.id, Decimal("0"))
         formatted, direction = format_balance(raw, g.currency_code)
-        result.append({
+        items.append({
             "id": g.id,
             "name": g.name,
             "description": g.description,
@@ -65,7 +89,11 @@ async def get_user_groups_with_stats(
             "balance_direction": direction,
             "updated_at": g.updated_at,
         })
-    return result
+
+    last = groups[-1]
+    next_cursor = encode_cursor(last.updated_at.isoformat(), str(last.id)) if has_more else None
+
+    return {"items": items, "next_cursor": next_cursor, "has_more": has_more}
 
 
 async def get_group_with_stats(

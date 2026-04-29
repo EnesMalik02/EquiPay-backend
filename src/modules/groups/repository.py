@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, or_, and_, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -14,8 +15,14 @@ async def get_by_id(db: AsyncSession, group_id: uuid.UUID) -> Group | None:
     return result.scalars().first()
 
 
-async def get_user_groups(db: AsyncSession, user_id: uuid.UUID) -> list[Group]:
-    result = await db.execute(
+async def get_user_groups(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    limit: int = 30,
+    cursor_updated_at: datetime | None = None,
+    cursor_id: uuid.UUID | None = None,
+) -> list[Group]:
+    query = (
         select(Group)
         .join(GroupMember, GroupMember.group_id == Group.id)
         .where(
@@ -24,7 +31,17 @@ async def get_user_groups(db: AsyncSession, user_id: uuid.UUID) -> list[Group]:
             GroupMember.status == "active",
             Group.deleted_at.is_(None),
         )
+        .order_by(Group.updated_at.desc(), Group.id.desc())
+        .limit(limit)
     )
+    if cursor_updated_at is not None and cursor_id is not None:
+        query = query.where(
+            or_(
+                Group.updated_at < cursor_updated_at,
+                and_(Group.updated_at == cursor_updated_at, Group.id < cursor_id),
+            )
+        )
+    result = await db.execute(query)
     return list(result.scalars().all())
 
 
