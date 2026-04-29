@@ -1,9 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import settings
-from src.core.exceptions import AppError, app_error_handler, validation_error_handler
+from src.core.exceptions import AppError, app_error_handler, http_exception_handler, validation_error_handler
 from src.core.lifespan import lifespan
 from src.modules.auth.router import router as auth_router
 from src.modules.users.router import router as users_router
@@ -27,6 +27,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(AppError, app_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 

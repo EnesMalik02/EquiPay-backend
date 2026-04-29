@@ -1,4 +1,4 @@
-from fastapi import Request, status
+from fastapi import HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -33,6 +33,13 @@ class BadRequestError(AppError):
 class UnauthorizedError(AppError):
     def __init__(self, message: str = "Kimlik doğrulama gerekli.") -> None:
         super().__init__(status.HTTP_401_UNAUTHORIZED, "UNAUTHORIZED", message)
+
+
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": f"HTTP_{exc.status_code}", "message": exc.detail}},
+    )
 
 
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
