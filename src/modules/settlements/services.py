@@ -45,9 +45,9 @@ async def get_group_settlements(
     group_id: uuid.UUID,
     *,
     limit: int = 20,
-    offset: int = 0,
-) -> list[Settlement]:
-    return await repository.get_by_group(db, group_id, limit=limit, offset=offset)
+    cursor: str | None = None,
+):
+    return await repository.get_by_group(db, group_id, limit=limit, cursor=cursor)
 
 
 async def get_user_settlements(
@@ -55,9 +55,9 @@ async def get_user_settlements(
     user_id: uuid.UUID,
     *,
     limit: int = 20,
-    offset: int = 0,
-) -> list[Settlement]:
-    return await repository.get_by_user(db, user_id, limit=limit, offset=offset)
+    cursor: str | None = None,
+):
+    return await repository.get_by_user(db, user_id, limit=limit, cursor=cursor)
 
 
 def validate_status_transition(

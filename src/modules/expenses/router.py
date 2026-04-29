@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
+from src.core.pagination import CursorPage
 from src.core.ratelimit import rate_limit
 from src.core.security import get_current_user
 from src.modules.expenses.models import Expense
@@ -96,20 +97,20 @@ async def create_expense(
 
 @router.get(
     "/group/{group_id}",
-    response_model=list[ExpenseResponse],
+    response_model=CursorPage[ExpenseResponse],
     summary="Grubun masraflarını listele",
     dependencies=[Depends(rate_limit("60/minute"))],
 )
 async def list_group_expenses(
     group_id: uuid.UUID,
+    cursor: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     try:
         return await expense_queries.list_group_expenses(
-            db, group_id, current_user.id, limit=limit, offset=offset
+            db, group_id, current_user.id, limit=limit, cursor=cursor
         )
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
@@ -117,22 +118,26 @@ async def list_group_expenses(
 
 @router.get(
     "/me/splits",
-    response_model=list[ExpenseWithMySplitResponse],
+    response_model=CursorPage[ExpenseWithMySplitResponse],
     summary="Kullanıcının split'i olan harcamalar (sayfalı)",
     dependencies=[Depends(rate_limit("60/minute"))],
 )
 async def list_my_split_expenses(
+    cursor: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
     status: str = Query(default="all", pattern="^(all|paid|unpaid)$"),
     group_id: uuid.UUID | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    expenses = await services.get_user_assigned_expenses(
-        db, current_user.id, limit=limit, offset=offset, status=status, group_id=group_id
+    page = await services.get_user_assigned_expenses(
+        db, current_user.id, limit=limit, cursor=cursor, status=status, group_id=group_id
     )
-    return [_build_with_my_split(exp, current_user.id) for exp in expenses]
+    return CursorPage(
+        items=[_build_with_my_split(exp, current_user.id) for exp in page.items],
+        next_cursor=page.next_cursor,
+        has_more=page.has_more,
+    )
 
 
 def _build_expense_full_detail(exp: Expense) -> ExpenseFullDetailResponse:

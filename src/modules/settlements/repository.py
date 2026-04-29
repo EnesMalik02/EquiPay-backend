@@ -1,8 +1,12 @@
-import uuid
+from __future__ import annotations
 
-from sqlalchemy import select
+import uuid
+from datetime import datetime
+
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.pagination import CursorPage, decode_cursor, encode_cursor
 from src.modules.settlements.models import Settlement
 
 
@@ -18,16 +22,38 @@ async def get_by_group(
     group_id: uuid.UUID,
     *,
     limit: int = 20,
-    offset: int = 0,
-) -> list[Settlement]:
+    cursor: str | None = None,
+) -> CursorPage[Settlement]:
+    filters = [Settlement.group_id == group_id]
+
+    if cursor:
+        parts = decode_cursor(cursor)
+        if parts and len(parts) == 2:
+            cursor_dt = datetime.fromisoformat(parts[0])
+            cursor_id = uuid.UUID(parts[1])
+            filters.append(
+                or_(
+                    Settlement.created_at < cursor_dt,
+                    and_(Settlement.created_at == cursor_dt, Settlement.id < cursor_id),
+                )
+            )
+
     result = await db.execute(
         select(Settlement)
-        .where(Settlement.group_id == group_id)
-        .order_by(Settlement.created_at.desc())
-        .limit(limit)
-        .offset(offset)
+        .where(*filters)
+        .order_by(Settlement.created_at.desc(), Settlement.id.desc())
+        .limit(limit + 1)
     )
-    return list(result.scalars().all())
+    rows = list(result.scalars().all())
+    has_more = len(rows) > limit
+    items = rows[:limit]
+
+    next_cursor = None
+    if has_more and items:
+        last = items[-1]
+        next_cursor = encode_cursor(last.created_at.isoformat(), str(last.id))
+
+    return CursorPage(items=items, next_cursor=next_cursor, has_more=has_more)
 
 
 async def get_by_user(
@@ -35,15 +61,35 @@ async def get_by_user(
     user_id: uuid.UUID,
     *,
     limit: int = 20,
-    offset: int = 0,
-) -> list[Settlement]:
+    cursor: str | None = None,
+) -> CursorPage[Settlement]:
+    filters = [(Settlement.payer_id == user_id) | (Settlement.receiver_id == user_id)]
+
+    if cursor:
+        parts = decode_cursor(cursor)
+        if parts and len(parts) == 2:
+            cursor_dt = datetime.fromisoformat(parts[0])
+            cursor_id = uuid.UUID(parts[1])
+            filters.append(
+                or_(
+                    Settlement.created_at < cursor_dt,
+                    and_(Settlement.created_at == cursor_dt, Settlement.id < cursor_id),
+                )
+            )
+
     result = await db.execute(
         select(Settlement)
-        .where(
-            (Settlement.payer_id == user_id) | (Settlement.receiver_id == user_id)
-        )
-        .order_by(Settlement.created_at.desc())
-        .limit(limit)
-        .offset(offset)
+        .where(*filters)
+        .order_by(Settlement.created_at.desc(), Settlement.id.desc())
+        .limit(limit + 1)
     )
-    return list(result.scalars().all())
+    rows = list(result.scalars().all())
+    has_more = len(rows) > limit
+    items = rows[:limit]
+
+    next_cursor = None
+    if has_more and items:
+        last = items[-1]
+        next_cursor = encode_cursor(last.created_at.isoformat(), str(last.id))
+
+    return CursorPage(items=items, next_cursor=next_cursor, has_more=has_more)

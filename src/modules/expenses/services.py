@@ -64,9 +64,9 @@ async def get_group_expenses(
     group_id: uuid.UUID,
     *,
     limit: int = 20,
-    offset: int = 0,
-) -> list[Expense]:
-    return await repository.get_by_group(db, group_id, limit=limit, offset=offset)
+    cursor: str | None = None,
+):
+    return await repository.get_by_group(db, group_id, limit=limit, cursor=cursor)
 
 
 async def update_expense(
@@ -140,11 +140,11 @@ async def get_user_assigned_expenses(
     user_id: uuid.UUID,
     *,
     limit: int = 20,
-    offset: int = 0,
+    cursor: str | None = None,
     status: str = "all",
     group_id: uuid.UUID | None = None,
-) -> list[Expense]:
-    return await repository.get_user_assigned(db, user_id, limit=limit, offset=offset, status=status, group_id=group_id)
+):
+    return await repository.get_user_assigned(db, user_id, limit=limit, cursor=cursor, status=status, group_id=group_id)
 
 
 async def pay_split(

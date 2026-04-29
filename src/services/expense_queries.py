@@ -69,10 +69,10 @@ async def list_group_expenses(
     user_id: uuid.UUID,
     *,
     limit: int,
-    offset: int,
-) -> list[Expense]:
+    cursor: str | None = None,
+):
     await _require_group_member(db, group_id, user_id)
-    return await expense_services.get_group_expenses(db, group_id, limit=limit, offset=offset)
+    return await expense_services.get_group_expenses(db, group_id, limit=limit, cursor=cursor)
 
 
 async def get_expense(

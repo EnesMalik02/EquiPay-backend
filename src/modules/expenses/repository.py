@@ -1,9 +1,13 @@
-import uuid
+from __future__ import annotations
 
-from sqlalchemy import select
+import uuid
+from datetime import date
+
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.core.pagination import CursorPage, decode_cursor, encode_cursor
 from src.modules.expenses.models import Expense, ExpenseSplit
 
 
@@ -25,17 +29,39 @@ async def get_by_group(
     group_id: uuid.UUID,
     *,
     limit: int = 20,
-    offset: int = 0,
-) -> list[Expense]:
+    cursor: str | None = None,
+) -> CursorPage[Expense]:
+    filters = [Expense.group_id == group_id, Expense.deleted_at.is_(None)]
+
+    if cursor:
+        parts = decode_cursor(cursor)
+        if parts and len(parts) == 2:
+            cursor_date = date.fromisoformat(parts[0])
+            cursor_id = uuid.UUID(parts[1])
+            filters.append(
+                or_(
+                    Expense.expense_date < cursor_date,
+                    and_(Expense.expense_date == cursor_date, Expense.id < cursor_id),
+                )
+            )
+
     result = await db.execute(
         select(Expense)
         .options(selectinload(Expense.splits))
-        .where(Expense.group_id == group_id, Expense.deleted_at.is_(None))
-        .order_by(Expense.expense_date.desc())
-        .limit(limit)
-        .offset(offset)
+        .where(*filters)
+        .order_by(Expense.expense_date.desc(), Expense.id.desc())
+        .limit(limit + 1)
     )
-    return list(result.scalars().all())
+    rows = list(result.scalars().all())
+    has_more = len(rows) > limit
+    items = rows[:limit]
+
+    next_cursor = None
+    if has_more and items:
+        last = items[-1]
+        next_cursor = encode_cursor(last.expense_date.isoformat(), str(last.id))
+
+    return CursorPage(items=items, next_cursor=next_cursor, has_more=has_more)
 
 
 async def get_user_assigned(
@@ -43,11 +69,12 @@ async def get_user_assigned(
     user_id: uuid.UUID,
     *,
     limit: int = 20,
-    offset: int = 0,
+    cursor: str | None = None,
     status: str = "all",
     group_id: uuid.UUID | None = None,
-) -> list[Expense]:
+) -> CursorPage[Expense]:
     filters = [ExpenseSplit.user_id == user_id, Expense.deleted_at.is_(None)]
+
     if group_id is not None:
         filters.append(Expense.group_id == group_id)
     if status == "unpaid":
@@ -55,16 +82,36 @@ async def get_user_assigned(
     elif status == "paid":
         filters.append(ExpenseSplit.paid_amount >= ExpenseSplit.owed_amount)
 
+    if cursor:
+        parts = decode_cursor(cursor)
+        if parts and len(parts) == 2:
+            cursor_date = date.fromisoformat(parts[0])
+            cursor_id = uuid.UUID(parts[1])
+            filters.append(
+                or_(
+                    Expense.expense_date < cursor_date,
+                    and_(Expense.expense_date == cursor_date, Expense.id < cursor_id),
+                )
+            )
+
     result = await db.execute(
         select(Expense)
         .join(ExpenseSplit, ExpenseSplit.expense_id == Expense.id)
         .options(selectinload(Expense.splits), selectinload(Expense.group), selectinload(Expense.payer))
         .where(*filters)
-        .order_by(Expense.expense_date.desc(), Expense.created_at.desc())
-        .limit(limit)
-        .offset(offset)
+        .order_by(Expense.expense_date.desc(), Expense.id.desc())
+        .limit(limit + 1)
     )
-    return list(result.scalars().unique().all())
+    rows = list(result.scalars().unique().all())
+    has_more = len(rows) > limit
+    items = rows[:limit]
+
+    next_cursor = None
+    if has_more and items:
+        last = items[-1]
+        next_cursor = encode_cursor(last.expense_date.isoformat(), str(last.id))
+
+    return CursorPage(items=items, next_cursor=next_cursor, has_more=has_more)
 
 
 async def get_split_by_id(
