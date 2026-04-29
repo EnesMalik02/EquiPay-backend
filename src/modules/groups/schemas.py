@@ -2,6 +2,8 @@ import uuid
 from datetime import datetime
 from pydantic import BaseModel, EmailStr, model_validator
 
+from src.core.schemas import ORMSchema
+
 
 # ── Group ──
 
@@ -16,14 +18,11 @@ class GroupUpdate(BaseModel):
     description: str | None = None
 
 
-class GroupResponse(BaseModel):
+class GroupResponse(ORMSchema):
     id: uuid.UUID
     name: str
     description: str | None = None
     currency_code: str
-
-    class Config:
-        from_attributes = True
 
 
 class GroupWithStatsResponse(GroupResponse):
@@ -52,7 +51,7 @@ class GroupMemberRoleUpdate(BaseModel):
     role: str
 
 
-class GroupMemberResponse(BaseModel):
+class GroupMemberResponse(ORMSchema):
     id: uuid.UUID
     group_id: uuid.UUID
     user_id: uuid.UUID
@@ -62,31 +61,22 @@ class GroupMemberResponse(BaseModel):
     username: str | None = None
     display_name: str | None = None
 
-    class Config:
-        from_attributes = True
 
-
-class GroupMemberAddResponse(BaseModel):
+class GroupMemberAddResponse(ORMSchema):
     user_id: uuid.UUID
     username: str | None = None
     display_name: str | None = None
     role: str
     status: str
-
-    class Config:
-        from_attributes = True
 
 
 class GroupInvitationRespond(BaseModel):
     action: str  # "accept" | "decline"
 
 
-class GroupMemberListResponse(BaseModel):
+class GroupMemberListResponse(ORMSchema):
     user_id: uuid.UUID
     username: str | None = None
     display_name: str | None = None
     role: str
     status: str
-
-    class Config:
-        from_attributes = True

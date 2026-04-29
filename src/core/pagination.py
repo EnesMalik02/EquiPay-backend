@@ -3,9 +3,8 @@ import hashlib
 import hmac
 from typing import Generic, TypeVar
 
-from pydantic import BaseModel
-
 from src.config import settings
+from src.core.schemas import ORMSchema
 
 T = TypeVar("T")
 
@@ -13,7 +12,7 @@ _SEP = "|"
 _SIG_SEP = "."
 
 
-class CursorPage(BaseModel, Generic[T]):
+class CursorPage(ORMSchema, Generic[T]):
     items: list[T]
     next_cursor: str | None = None
     has_more: bool

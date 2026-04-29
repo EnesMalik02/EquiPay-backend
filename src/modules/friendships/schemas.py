@@ -2,6 +2,8 @@ import uuid
 from datetime import datetime
 from pydantic import BaseModel, EmailStr, model_validator
 
+from src.core.schemas import ORMSchema
+
 
 class FriendRequestCreate(BaseModel):
     email: EmailStr | None = None
@@ -18,30 +20,21 @@ class FriendRequestRespond(BaseModel):
     action: str  # 'accept' | 'reject'
 
 
-class FriendUserInfo(BaseModel):
+class FriendUserInfo(ORMSchema):
     id: uuid.UUID
     email: str
     display_name: str | None = None
     avatar_url: str | None = None
     username: str | None = None
 
-    class Config:
-        from_attributes = True
 
-
-class FriendResponse(BaseModel):
+class FriendResponse(ORMSchema):
     friendship_id: uuid.UUID
     user: FriendUserInfo
     created_at: datetime | None = None
 
-    class Config:
-        from_attributes = True
 
-
-class FriendRequestResponse(BaseModel):
+class FriendRequestResponse(ORMSchema):
     id: uuid.UUID
     requester: FriendUserInfo
     created_at: datetime | None = None
-
-    class Config:
-        from_attributes = True

@@ -3,10 +3,12 @@ import uuid
 from datetime import datetime
 from pydantic import BaseModel, EmailStr, field_validator
 
+from src.core.schemas import ORMSchema
+
 USERNAME_RE = re.compile(r'^[a-z0-9_]+$')
 
 
-class UserResponse(BaseModel):
+class UserResponse(ORMSchema):
     id: uuid.UUID
     email: str
     display_name: str | None = None
@@ -16,9 +18,6 @@ class UserResponse(BaseModel):
     is_active: bool = True
     created_at: datetime | None = None
     updated_at: datetime | None = None
-
-    class Config:
-        from_attributes = True
 
 
 class UpdateProfileRequest(BaseModel):
@@ -35,12 +34,9 @@ class UpdateProfileRequest(BaseModel):
         return v
 
 
-class UserSearchResult(BaseModel):
+class UserSearchResult(ORMSchema):
     id: uuid.UUID
     email: str
     display_name: str | None = None
     avatar_url: str | None = None
     username: str | None = None
-
-    class Config:
-        from_attributes = True

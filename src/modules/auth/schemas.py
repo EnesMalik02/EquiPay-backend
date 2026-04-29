@@ -1,6 +1,8 @@
 import re
 from pydantic import BaseModel, EmailStr, field_validator
 
+from src.core.schemas import ORMSchema
+
 USERNAME_RE = re.compile(r'^[a-z0-9_]+$')
 
 
@@ -23,7 +25,7 @@ class UserLoginRequest(BaseModel):
     password: str
 
 
-class TokenResponse(BaseModel):
+class TokenResponse(ORMSchema):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"

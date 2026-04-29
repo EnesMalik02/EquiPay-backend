@@ -1,7 +1,9 @@
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import settings
+from src.core.exceptions import AppError, app_error_handler, validation_error_handler
 from src.core.lifespan import lifespan
 from src.modules.auth.router import router as auth_router
 from src.modules.users.router import router as users_router
@@ -25,6 +27,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_exception_handler(AppError, app_error_handler)
+app.add_exception_handler(RequestValidationError, validation_error_handler)
+
 app.include_router(auth_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(groups_router, prefix="/api")
@@ -33,9 +38,7 @@ app.include_router(settlements_router, prefix="/api")
 app.include_router(friendships_router, prefix="/api")
 app.include_router(notifications_router, prefix="/api")
 
+
 @app.get("/", summary="Health check")
 async def health_check():
-    return {
-        "status": "ok",
-        "message": "EquiPay API is running.",
-    }
+    return {"status": "ok", "message": "EquiPay API is running."}

@@ -3,6 +3,8 @@ from datetime import datetime
 from decimal import Decimal
 from pydantic import BaseModel, field_validator
 
+from src.core.schemas import ORMSchema
+
 
 class SettlementCreate(BaseModel):
     group_id: uuid.UUID | None = None
@@ -23,7 +25,7 @@ class SettlementUpdateStatus(BaseModel):
     status: str  # 'confirmed' | 'rejected' | 'cancelled'
 
 
-class SettlementResponse(BaseModel):
+class SettlementResponse(ORMSchema):
     id: uuid.UUID
     group_id: uuid.UUID | None = None
     payer_id: uuid.UUID
@@ -34,6 +36,3 @@ class SettlementResponse(BaseModel):
     settled_at: datetime | None = None
     note: str | None = None
     created_at: datetime | None = None
-
-    class Config:
-        from_attributes = True

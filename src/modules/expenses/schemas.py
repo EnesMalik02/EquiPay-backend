@@ -3,6 +3,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from pydantic import BaseModel, field_validator
 
+from src.core.schemas import ORMSchema
+
 SPLIT_TYPES = {"equal", "exact", "percentage"}
 
 
@@ -60,35 +62,30 @@ class ExpenseSplitPayRequest(BaseModel):
 
 # ── Response schemas ──
 
-class ExpenseSplitResponse(BaseModel):
-    """Split detayı — expense detail sayfasında tüm split'ler için kullanılır."""
+class ExpenseSplitResponse(ORMSchema):
     id: uuid.UUID
     expense_id: uuid.UUID
     user_id: uuid.UUID
     owed_amount: Decimal
     paid_amount: Decimal
 
-    class Config:
-        from_attributes = True
 
-
-class GroupBrief(BaseModel):
+class GroupBrief(ORMSchema):
     group_id: uuid.UUID
     name: str
 
 
-class PaidByBrief(BaseModel):
+class PaidByBrief(ORMSchema):
     name: str
 
 
-class UserAmount(BaseModel):
+class UserAmount(ORMSchema):
     direction: str  # "debit" | "credit"
     amount: Decimal
     currency: str
 
 
-class ExpenseResponse(BaseModel):
-    """Temel expense bilgisi — grup expense listesi için."""
+class ExpenseResponse(ORMSchema):
     id: uuid.UUID
     group_id: uuid.UUID | None = None
     paid_by: uuid.UUID
@@ -101,34 +98,30 @@ class ExpenseResponse(BaseModel):
     is_fully_paid: bool
     created_at: datetime | None = None
 
-    class Config:
-        from_attributes = True
-
 
 class ExpenseDetailResponse(ExpenseResponse):
-    """Expense detayı — tüm split'lerle birlikte."""
     splits: list[ExpenseSplitResponse] = []
 
 
-# ── New detail schemas ──
+# ── Detail schemas ──
 
-class GroupDetail(BaseModel):
+class GroupDetail(ORMSchema):
     id: uuid.UUID
     name: str
 
 
-class PaidByDetail(BaseModel):
+class PaidByDetail(ORMSchema):
     id: uuid.UUID
     name: str
 
 
-class SplitUserBrief(BaseModel):
+class SplitUserBrief(ORMSchema):
     id: uuid.UUID
     name: str
     avatar_url: str | None = None
 
 
-class SplitDetailItem(BaseModel):
+class SplitDetailItem(ORMSchema):
     id: uuid.UUID
     user: SplitUserBrief
     owed_amount: Decimal
@@ -137,7 +130,7 @@ class SplitDetailItem(BaseModel):
     status: str  # "paid" | "pending"
 
 
-class ExpenseFullDetailResponse(BaseModel):
+class ExpenseFullDetailResponse(ORMSchema):
     id: uuid.UUID
     group: GroupDetail | None
     paid_by: PaidByDetail
@@ -151,7 +144,7 @@ class ExpenseFullDetailResponse(BaseModel):
     splits: list[SplitDetailItem] = []
 
 
-class ExpenseWithMySplitResponse(BaseModel):
+class ExpenseWithMySplitResponse(ORMSchema):
     id: uuid.UUID
     title: str
     amount: Decimal
