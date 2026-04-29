@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.core.ratelimit import rate_limit
+from src.core.schemas import MessageResponse
 from src.core.security import get_current_user
 from src.modules.users.models import User
 from src.modules.friendships.schemas import (
@@ -12,13 +13,14 @@ from src.modules.friendships.schemas import (
     FriendResponse,
     FriendRequestResponse,
     FriendUserInfo,
+    FriendshipStatusResponse,
 )
 from src.modules.friendships import services
 
 router = APIRouter(prefix="/friendships", tags=["Friendships"])
 
 
-@router.post("", status_code=status.HTTP_201_CREATED, summary="Arkadaşlık isteği gönder", dependencies=[Depends(rate_limit("20/minute"))])
+@router.post("", response_model=FriendshipStatusResponse, status_code=status.HTTP_201_CREATED, summary="Arkadaşlık isteği gönder", dependencies=[Depends(rate_limit("20/minute"))])
 async def send_friend_request(
     data: FriendRequestCreate,
     current_user: User = Depends(get_current_user),
@@ -36,7 +38,7 @@ async def send_friend_request(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
-    return {"id": str(friendship.id), "status": friendship.status}
+    return friendship
 
 
 @router.get("", response_model=list[FriendResponse], summary="Arkadaş listesi", dependencies=[Depends(rate_limit("60/minute"))])
@@ -84,7 +86,7 @@ async def list_pending_requests(
     ]
 
 
-@router.patch("/{friendship_id}", summary="Arkadaşlık isteğini yanıtla", dependencies=[Depends(rate_limit("20/minute"))])
+@router.patch("/{friendship_id}", response_model=FriendshipStatusResponse | MessageResponse, summary="Arkadaşlık isteğini yanıtla", dependencies=[Depends(rate_limit("20/minute"))])
 async def respond_to_request(
     friendship_id: uuid.UUID,
     data: FriendRequestRespond,
@@ -105,11 +107,10 @@ async def respond_to_request(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bu istek zaten yanıtlanmış.")
 
     if data.action == "accept":
-        updated = await services.accept_request(db, friendship)
-        return {"id": str(updated.id), "status": updated.status}
+        return await services.accept_request(db, friendship)
     else:
         await services.delete_friendship(db, friendship)
-        return {"detail": "İstek reddedildi."}
+        return MessageResponse(message="İstek reddedildi.")
 
 
 @router.delete("/{friendship_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Arkadaşlıktan çık / İsteği sil", dependencies=[Depends(rate_limit("20/minute"))])

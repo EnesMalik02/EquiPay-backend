@@ -38,3 +38,8 @@ class FriendRequestResponse(ORMSchema):
     id: uuid.UUID
     requester: FriendUserInfo
     created_at: datetime | None = None
+
+
+class FriendshipStatusResponse(ORMSchema):
+    id: uuid.UUID
+    status: str

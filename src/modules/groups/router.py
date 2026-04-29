@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.core.ratelimit import rate_limit
+from src.core.schemas import MessageResponse
 from src.core.security import get_current_user
 from src.modules.users.models import User
 from src.core.pagination import CursorPage
@@ -122,6 +123,7 @@ async def delete_group(
 
 @router.post(
     "/{group_id}/leave",
+    response_model=MessageResponse,
     status_code=status.HTTP_200_OK,
     summary="Gruptan çık",
     dependencies=[Depends(rate_limit("10/minute"))],
@@ -151,8 +153,8 @@ async def leave_group(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
     if result["action"] == "group_deleted":
-        return {"detail": "Son üyesiniz; grup silindi."}
-    return {"detail": "Gruptan başarıyla çıkıldı."}
+        return MessageResponse(message="Son üyesiniz; grup silindi.")
+    return MessageResponse(message="Gruptan başarıyla çıkıldı.")
 
 
 # ── Member Role ──────────────────────────────────────────────────────────
@@ -240,6 +242,7 @@ async def list_members(
 
 @router.post(
     "/{group_id}/invitations/respond",
+    response_model=MessageResponse,
     status_code=status.HTTP_200_OK,
     summary="Grup davetini kabul et veya reddet",
     dependencies=[Depends(rate_limit("20/minute"))],
@@ -267,4 +270,4 @@ async def respond_to_invitation(
         )
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    return {"detail": "Gruba katıldınız." if data.action == "accept" else "Davet reddedildi."}
+    return MessageResponse(message="Gruba katıldınız." if data.action == "accept" else "Davet reddedildi.")
