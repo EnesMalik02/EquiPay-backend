@@ -33,11 +33,23 @@ router = APIRouter(prefix="/expenses", tags=["Expenses"])
 def _build_with_my_split(exp: Expense, user_id: uuid.UUID) -> ExpenseWithMySplitResponse:
     my_split = next((s for s in exp.splits if s.user_id == user_id), None)
     direction = "credit" if exp.paid_by == user_id else "debit"
-    outstanding = (my_split.owed_amount - my_split.paid_amount) if my_split else Decimal("0")
+    if direction == "credit":
+        outstanding = sum(
+            s.owed_amount - s.paid_amount
+            for s in exp.splits
+            if s.user_id != user_id and s.owed_amount > s.paid_amount
+        )
+    else:
+        outstanding = (my_split.owed_amount - my_split.paid_amount) if my_split else Decimal("0")
     payer_name = exp.payer.display_name or exp.payer.username if exp.payer else ""
     return ExpenseWithMySplitResponse(
         id=exp.id,
         title=exp.title,
+        amount=exp.amount,
+        currency=exp.currency,
+        expense_date=exp.expense_date,
+        is_fully_paid=exp.is_fully_paid,
+        split_id=my_split.id if my_split else None,
         group=GroupBrief(group_id=exp.group.id, name=exp.group.name) if exp.group else None,
         paid_by=PaidByBrief(name=payer_name),
         created_at=exp.created_at,
@@ -113,11 +125,12 @@ async def list_my_split_expenses(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     status: str = Query(default="all", pattern="^(all|pending|paid)$"),
+    group_id: uuid.UUID | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     expenses = await services.get_user_assigned_expenses(
-        db, current_user.id, limit=limit, offset=offset, status=status
+        db, current_user.id, limit=limit, offset=offset, status=status, group_id=group_id
     )
     return [_build_with_my_split(exp, current_user.id) for exp in expenses]
 

@@ -154,6 +154,11 @@ class ExpenseFullDetailResponse(BaseModel):
 class ExpenseWithMySplitResponse(BaseModel):
     id: uuid.UUID
     title: str
+    amount: Decimal
+    currency: str
+    expense_date: date | None
+    is_fully_paid: bool
+    split_id: uuid.UUID | None
     group: GroupBrief | None
     paid_by: PaidByBrief
     created_at: datetime | None

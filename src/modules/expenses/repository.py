@@ -45,8 +45,11 @@ async def get_user_assigned(
     limit: int = 20,
     offset: int = 0,
     status: str = "all",
+    group_id: uuid.UUID | None = None,
 ) -> list[Expense]:
     filters = [ExpenseSplit.user_id == user_id, Expense.deleted_at.is_(None)]
+    if group_id is not None:
+        filters.append(Expense.group_id == group_id)
     if status == "pending":
         filters.append(Expense.is_fully_paid == False)  # noqa: E712
     elif status == "paid":
