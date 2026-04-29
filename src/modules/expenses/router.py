@@ -124,7 +124,7 @@ async def list_group_expenses(
 async def list_my_split_expenses(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    status: str = Query(default="all", pattern="^(all|pending|paid)$"),
+    status: str = Query(default="all", pattern="^(all|paid|unpaid)$"),
     group_id: uuid.UUID | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

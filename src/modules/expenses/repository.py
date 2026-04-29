@@ -50,10 +50,10 @@ async def get_user_assigned(
     filters = [ExpenseSplit.user_id == user_id, Expense.deleted_at.is_(None)]
     if group_id is not None:
         filters.append(Expense.group_id == group_id)
-    if status == "pending":
-        filters.append(Expense.is_fully_paid == False)  # noqa: E712
+    if status == "unpaid":
+        filters.append(ExpenseSplit.owed_amount > ExpenseSplit.paid_amount)
     elif status == "paid":
-        filters.append(Expense.is_fully_paid == True)  # noqa: E712
+        filters.append(ExpenseSplit.paid_amount >= ExpenseSplit.owed_amount)
 
     result = await db.execute(
         select(Expense)
