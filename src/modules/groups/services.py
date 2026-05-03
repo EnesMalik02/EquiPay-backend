@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.pagination import encode_cursor, decode_cursor
 from src.modules.currencies.formatting import format_balance
 from src.modules.expenses import services as expenses_services
-from src.modules.friendships import repository as friendships_repository
 from src.modules.groups import repository
 from src.modules.groups.models import Group, GroupMember
 from src.modules.notifications import repository as notifications_repository
@@ -204,9 +203,6 @@ async def add_member(
 async def _resolve_member_status(
     db: AsyncSession, invited_by: uuid.UUID, user_id: uuid.UUID
 ) -> str:
-    friendship = await friendships_repository.get_existing(db, invited_by, user_id)
-    if friendship and friendship.status == "accepted":
-        return "active"
     return "pending"
 
 

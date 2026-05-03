@@ -52,5 +52,3 @@ class User(Base):
     expense_splits = relationship("ExpenseSplit", back_populates="user")
     sent_settlements = relationship("Settlement", back_populates="payer", foreign_keys="Settlement.payer_id")
     received_settlements = relationship("Settlement", back_populates="receiver", foreign_keys="Settlement.receiver_id")
-    sent_friend_requests = relationship("Friendship", back_populates="requester", foreign_keys="Friendship.requester_id")
-    received_friend_requests = relationship("Friendship", back_populates="addressee", foreign_keys="Friendship.addressee_id")
