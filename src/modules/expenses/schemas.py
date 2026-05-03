@@ -6,6 +6,7 @@ from pydantic import BaseModel, field_validator
 from src.core.schemas import ORMSchema
 
 SPLIT_TYPES = {"equal", "exact", "percentage"}
+EXPENSE_CATEGORIES = {"market", "yemek", "fatura", "ulasim", "konaklama", "eglence", "diger"}
 
 
 # ── Input schemas ──
@@ -24,6 +25,7 @@ class ExpenseCreate(BaseModel):
     notes: str | None = None
     expense_date: date | None = None
     split_type: str = "equal"
+    category: str | None = None
     splits: list[ExpenseSplitInput]
 
     @field_validator("amount")
@@ -40,6 +42,13 @@ class ExpenseCreate(BaseModel):
             raise ValueError(f"split_type şunlardan biri olmalıdır: {', '.join(SPLIT_TYPES)}")
         return v
 
+    @field_validator("category")
+    @classmethod
+    def category_must_be_valid(cls, v: str | None) -> str | None:
+        if v is not None and v not in EXPENSE_CATEGORIES:
+            raise ValueError(f"category şunlardan biri olmalıdır: {', '.join(sorted(EXPENSE_CATEGORIES))}")
+        return v
+
 
 class ExpenseUpdate(BaseModel):
     title: str | None = None
@@ -47,6 +56,14 @@ class ExpenseUpdate(BaseModel):
     currency: str | None = None
     notes: str | None = None
     expense_date: date | None = None
+    category: str | None = None
+
+    @field_validator("category")
+    @classmethod
+    def category_must_be_valid(cls, v: str | None) -> str | None:
+        if v is not None and v not in EXPENSE_CATEGORIES:
+            raise ValueError(f"category şunlardan biri olmalıdır: {', '.join(sorted(EXPENSE_CATEGORIES))}")
+        return v
 
 
 class ExpenseSplitPayRequest(BaseModel):
@@ -95,6 +112,7 @@ class ExpenseResponse(ORMSchema):
     notes: str | None = None
     expense_date: date | None = None
     split_type: str
+    category: str | None = None
     is_fully_paid: bool
     created_at: datetime | None = None
 
@@ -140,6 +158,7 @@ class ExpenseFullDetailResponse(ORMSchema):
     notes: str | None = None
     expense_date: date | None = None
     split_type: str
+    category: str | None = None
     created_at: datetime | None = None
     splits: list[SplitDetailItem] = []
 
@@ -154,6 +173,7 @@ class ExpenseWithMySplitResponse(ORMSchema):
     split_id: uuid.UUID | None
     group: GroupBrief | None
     paid_by: PaidByBrief
+    category: str | None = None
     created_at: datetime | None
     updated_at: datetime | None
     user_amount: UserAmount

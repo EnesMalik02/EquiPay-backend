@@ -21,6 +21,7 @@ async def create_expense(
     notes: str | None,
     expense_date=None,
     split_type: str = "equal",
+    category: str | None = None,
     splits: list[ExpenseSplitInput],
 ) -> Expense:
     split_total = sum(s.owed_amount for s in splits)
@@ -36,6 +37,7 @@ async def create_expense(
         notes=notes,
         expense_date=expense_date,
         split_type=split_type,
+        category=category,
     )
     db.add(expense)
     await db.flush()
@@ -78,6 +80,7 @@ async def update_expense(
     currency: str | None = None,
     notes: str | None = None,
     expense_date=None,
+    category: str | None = None,
 ) -> Expense:
     if title is not None:
         expense.title = title
@@ -89,6 +92,8 @@ async def update_expense(
         expense.notes = notes
     if expense_date is not None:
         expense.expense_date = expense_date
+    if category is not None:
+        expense.category = category
     await db.flush()
     return await repository.get_by_id(db, expense.id)
 
@@ -103,6 +108,7 @@ async def update_as_owner(
     currency: str | None = None,
     notes: str | None = None,
     expense_date=None,
+    category: str | None = None,
 ) -> Expense:
     if expense.paid_by != user_id:
         raise PermissionError("Yalnızca masrafı oluşturan güncelleyebilir.")
@@ -113,6 +119,7 @@ async def update_as_owner(
         currency=currency,
         notes=notes,
         expense_date=expense_date,
+        category=category,
     )
 
 

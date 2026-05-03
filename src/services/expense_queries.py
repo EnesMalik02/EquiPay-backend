@@ -45,6 +45,7 @@ async def create_expense(
     notes: str | None,
     expense_date,
     split_type: str,
+    category: str | None,
     splits: list[ExpenseSplitInput],
     current_user_id: uuid.UUID,
 ) -> Expense:
@@ -59,6 +60,7 @@ async def create_expense(
         notes=notes,
         expense_date=expense_date,
         split_type=split_type,
+        category=category,
         splits=splits,
     )
 
@@ -95,6 +97,7 @@ async def update_expense(
     currency: str | None,
     notes: str | None,
     expense_date,
+    category: str | None,
 ) -> Expense:
     expense = await _get_expense_or_404(db, expense_id)
     await _require_group_member(db, expense.group_id, user_id)
@@ -105,6 +108,7 @@ async def update_expense(
         currency=currency,
         notes=notes,
         expense_date=expense_date,
+        category=category,
     )
 
 

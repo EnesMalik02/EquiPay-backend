@@ -53,6 +53,7 @@ def _build_with_my_split(exp: Expense, user_id: uuid.UUID) -> ExpenseWithMySplit
         split_id=my_split.id if my_split else None,
         group=GroupBrief(group_id=exp.group.id, name=exp.group.name) if exp.group else None,
         paid_by=PaidByBrief(name=payer_name),
+        category=exp.category,
         created_at=exp.created_at,
         updated_at=my_split.updated_at if my_split else None,
         user_amount=UserAmount(
@@ -86,6 +87,7 @@ async def create_expense(
             notes=data.notes,
             expense_date=data.expense_date,
             split_type=data.split_type,
+            category=data.category,
             splits=data.splits,
             current_user_id=current_user.id,
         )
@@ -174,6 +176,7 @@ def _build_expense_full_detail(exp: Expense) -> ExpenseFullDetailResponse:
         notes=exp.notes,
         expense_date=exp.expense_date,
         split_type=exp.split_type,
+        category=exp.category,
         created_at=exp.created_at,
         splits=splits,
     )
@@ -219,6 +222,7 @@ async def update_expense(
             currency=data.currency,
             notes=data.notes,
             expense_date=data.expense_date,
+            category=data.category,
         )
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))

@@ -56,6 +56,9 @@ class Expense(Base):
     split_type: Mapped[str] = mapped_column(
         String(20), server_default=text("'equal'"), nullable=False
     )
+    category: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True
+    )
     deleted_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
