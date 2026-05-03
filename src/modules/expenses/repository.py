@@ -47,7 +47,11 @@ async def get_by_group(
 
     result = await db.execute(
         select(Expense)
-        .options(selectinload(Expense.splits))
+        .options(
+            selectinload(Expense.splits).selectinload(ExpenseSplit.user),
+            selectinload(Expense.group),
+            selectinload(Expense.payer),
+        )
         .where(*filters)
         .order_by(Expense.expense_date.desc(), Expense.id.desc())
         .limit(limit + 1)

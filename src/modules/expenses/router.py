@@ -97,7 +97,7 @@ async def create_expense(
 
 @router.get(
     "/group/{group_id}",
-    response_model=CursorPage[ExpenseResponse],
+    response_model=CursorPage[ExpenseWithMySplitResponse],
     summary="Grubun masraflarını listele",
     dependencies=[Depends(rate_limit("60/minute"))],
 )
@@ -109,8 +109,13 @@ async def list_group_expenses(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        return await expense_queries.list_group_expenses(
+        page = await expense_queries.list_group_expenses(
             db, group_id, current_user.id, limit=limit, cursor=cursor
+        )
+        return CursorPage(
+            items=[_build_with_my_split(exp, current_user.id) for exp in page.items],
+            next_cursor=page.next_cursor,
+            has_more=page.has_more,
         )
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
