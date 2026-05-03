@@ -215,7 +215,6 @@ async def add_member(
             db,
             group_id=group_id,
             invited_by=current_user.id,
-            phone=data.phone,
             email=data.email,
             username=data.username,
             role=data.role,

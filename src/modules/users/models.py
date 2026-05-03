@@ -32,9 +32,6 @@ class User(Base):
     username: Mapped[Optional[str]] = mapped_column(
         String(100), unique=True, nullable=True
     )
-    phone: Mapped[Optional[str]] = mapped_column(
-        String(20), unique=True, nullable=True
-    )
     is_active: Mapped[bool] = mapped_column(
         Boolean, server_default=text("true"), nullable=False
     )

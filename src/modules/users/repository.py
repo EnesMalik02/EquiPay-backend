@@ -18,13 +18,6 @@ async def get_by_email(db: AsyncSession, email: str) -> User | None:
     return result.scalars().first()
 
 
-async def get_by_phone(db: AsyncSession, phone: str) -> User | None:
-    result = await db.execute(
-        select(User).where(User.phone == phone, User.deleted_at.is_(None))
-    )
-    return result.scalars().first()
-
-
 async def get_by_username(db: AsyncSession, username: str) -> User | None:
     result = await db.execute(
         select(User).where(User.username == username, User.deleted_at.is_(None))
@@ -33,10 +26,10 @@ async def get_by_username(db: AsyncSession, username: str) -> User | None:
 
 
 async def get_by_identifier(db: AsyncSession, identifier: str) -> User | None:
-    """Email veya telefon numarası ile kullanıcı bulur."""
+    """Email veya kullanıcı adı ile kullanıcı bulur."""
     result = await db.execute(
         select(User).where(
-            or_(User.email == identifier, User.phone == identifier),
+            or_(User.email == identifier, User.username == identifier),
             User.deleted_at.is_(None),
         )
     )
@@ -50,7 +43,6 @@ async def update_profile(
     email: str | None,
     display_name: str | None,
     username: str | None,
-    phone: str | None,
 ) -> User:
     from datetime import datetime, timezone
     if email is not None:
@@ -59,8 +51,6 @@ async def update_profile(
         user.display_name = display_name
     if username is not None:
         user.username = username
-    if phone is not None:
-        user.phone = phone
     user.updated_at = datetime.now(timezone.utc)
     await db.flush()
     await db.refresh(user)
@@ -91,7 +81,6 @@ async def search_users(
             or_(
                 User.email.ilike(f"%{q}%"),
                 User.username.ilike(f"%{q}%"),
-                User.phone.ilike(f"%{q}%"),
             ),
             User.id != exclude_id,
             User.deleted_at.is_(None),

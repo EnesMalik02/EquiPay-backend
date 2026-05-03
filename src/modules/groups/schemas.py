@@ -35,15 +35,14 @@ class GroupWithStatsResponse(GroupResponse):
 # ── GroupMember ──
 
 class GroupMemberAdd(BaseModel):
-    phone: str | None = None
     email: EmailStr | None = None
     username: str | None = None
     role: str = "member"
 
     @model_validator(mode="after")
     def at_least_one_identifier_required(self) -> "GroupMemberAdd":
-        if not self.phone and not self.email and not self.username:
-            raise ValueError("phone, email veya username alanlarından en az biri zorunludur.")
+        if not self.email and not self.username:
+            raise ValueError("email veya username alanlarından en az biri zorunludur.")
         return self
 
 

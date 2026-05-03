@@ -15,10 +15,6 @@ async def get_by_email(db: AsyncSession, email: str) -> User | None:
     return await repository.get_by_email(db, email)
 
 
-async def get_by_phone(db: AsyncSession, phone: str) -> User | None:
-    return await repository.get_by_phone(db, phone)
-
-
 async def get_by_username(db: AsyncSession, username: str) -> User | None:
     return await repository.get_by_username(db, username)
 
@@ -42,7 +38,6 @@ async def update_profile(
     email: str | None = None,
     display_name: str | None = None,
     username: str | None = None,
-    phone: str | None = None,
 ) -> User:
     from fastapi import HTTPException, status
     if email and email != user.email:
@@ -53,12 +48,8 @@ async def update_profile(
         existing = await repository.get_by_username(db, username)
         if existing:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bu kullanıcı adı zaten kullanılıyor.")
-    if phone and phone != user.phone:
-        existing = await repository.get_by_phone(db, phone)
-        if existing:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bu telefon numarası zaten kullanılıyor.")
     return await repository.update_profile(
-        db, user, email=email, display_name=display_name, username=username, phone=phone
+        db, user, email=email, display_name=display_name, username=username
     )
 
 
@@ -67,14 +58,12 @@ async def create_user(
     *,
     email: str,
     password: str,
-    phone: str,
     username: str,
 ) -> User:
     user = User(
         email=email,
         password_hash=hash_password(password),
         username=username,
-        phone=phone,
     )
     db.add(user)
     await db.flush()

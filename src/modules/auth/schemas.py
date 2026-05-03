@@ -9,7 +9,6 @@ USERNAME_RE = re.compile(r'^[a-z0-9_]+$')
 class UserRegisterRequest(BaseModel):
     email: EmailStr
     password: str
-    phone: str
     username: str
 
     @field_validator("username")

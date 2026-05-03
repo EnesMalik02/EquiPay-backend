@@ -11,17 +11,11 @@ async def send_request(
     db: AsyncSession,
     *,
     requester_id: uuid.UUID,
-    addressee_email: str | None = None,
-    addressee_phone: str | None = None,
+    addressee_email: str,
 ) -> Friendship:
-    if addressee_phone:
-        addressee = await users_services.get_by_phone(db, addressee_phone)
-        if not addressee:
-            raise LookupError("Bu telefon numarasına kayıtlı kullanıcı bulunamadı.")
-    else:
-        addressee = await users_services.get_by_email(db, addressee_email)
-        if not addressee:
-            raise LookupError("Bu email'e kayıtlı kullanıcı bulunamadı.")
+    addressee = await users_services.get_by_email(db, addressee_email)
+    if not addressee:
+        raise LookupError("Bu email'e kayıtlı kullanıcı bulunamadı.")
 
     if addressee.id == requester_id:
         raise ValueError("Kendinize arkadaşlık isteği gönderemezsiniz.")

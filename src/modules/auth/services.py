@@ -28,14 +28,12 @@ async def create_user(
     *,
     email: str,
     password: str,
-    phone: str,
     username: str,
 ) -> User:
     user = User(
         email=email,
         password_hash=hash_password(password),
         username=username,
-        phone=phone,
     )
     db.add(user)
     await db.flush()

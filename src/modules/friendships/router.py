@@ -30,8 +30,7 @@ async def send_friend_request(
         friendship = await services.send_request(
             db,
             requester_id=current_user.id,
-            addressee_email=str(data.email) if data.email else None,
-            addressee_phone=data.phone,
+            addressee_email=str(data.email),
         )
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))

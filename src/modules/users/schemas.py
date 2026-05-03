@@ -14,7 +14,6 @@ class UserResponse(ORMSchema):
     display_name: str | None = None
     avatar_url: str | None = None
     username: str | None = None
-    phone: str | None = None
     is_active: bool = True
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -24,7 +23,6 @@ class UpdateProfileRequest(BaseModel):
     email: EmailStr | None = None
     display_name: str | None = None
     username: str | None = None
-    phone: str | None = None
 
     @field_validator("username")
     @classmethod

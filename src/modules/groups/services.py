@@ -158,7 +158,6 @@ async def add_member(
     *,
     group_id: uuid.UUID,
     invited_by: uuid.UUID,
-    phone: str | None = None,
     email: str | None = None,
     username: str | None = None,
     user_id: uuid.UUID | None = None,
@@ -169,11 +168,7 @@ async def add_member(
     değilse pending durumunda eklenir ve bildirim gönderilir.
     """
     if user_id is None:
-        if phone:
-            user = await users_services.get_by_phone(db, phone)
-            if not user:
-                raise LookupError("Bu telefon numarasına kayıtlı kullanıcı bulunamadı.")
-        elif email:
+        if email:
             user = await users_services.get_by_email(db, email)
             if not user:
                 raise LookupError("Bu email adresine kayıtlı kullanıcı bulunamadı.")

@@ -23,11 +23,10 @@ async def update_profile(
         email=body.email,
         display_name=body.display_name,
         username=body.username,
-        phone=body.phone,
     )
 
 
-@router.get("/search", response_model=list[UserSearchResult], summary="Kullanıcı ara (email, kullanıcı adı veya telefon)", dependencies=[Depends(rate_limit("30/minute"))])
+@router.get("/search", response_model=list[UserSearchResult], summary="Kullanıcı ara (email veya kullanıcı adı)", dependencies=[Depends(rate_limit("30/minute"))])
 async def search_users(
     q: str = Query(..., min_length=2),
     current_user: User = Depends(get_current_user),
