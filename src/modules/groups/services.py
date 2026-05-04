@@ -303,3 +303,14 @@ async def leave_group(db: AsyncSession, group: Group, user_id: uuid.UUID) -> dic
     member.left_at = datetime.now(timezone.utc)
     await db.flush()
     return {"action": "left"}
+
+
+async def get_group_stats(
+    db: AsyncSession, group_id: uuid.UUID, user_id: uuid.UUID
+) -> dict:
+    from src.modules.groups import public as groups_public
+    await groups_public.require_group_member(db, group_id, user_id)
+    group = await repository.get_by_id(db, group_id)
+    stats = await repository.get_group_stats(db, group_id)
+    stats["currency"] = group.currency_code if group else "TRY"
+    return stats

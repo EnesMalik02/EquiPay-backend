@@ -13,6 +13,10 @@ from src.modules.groups.schemas import (
     GroupUpdate,
     GroupResponse,
     GroupWithStatsResponse,
+    GroupStatsResponse,
+    MemberStat,
+    CategoryStat,
+    MonthlyTrend,
     GroupMemberAdd,
     GroupMemberRoleUpdate,
     GroupMemberResponse,
@@ -68,6 +72,60 @@ async def get_group(
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
     return group
+
+
+@router.get(
+    "/{group_id}/stats",
+    response_model=GroupStatsResponse,
+    summary="Grup istatistikleri",
+    dependencies=[Depends(rate_limit("60/minute"))],
+)
+async def get_group_stats(
+    group_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        raw = await services.get_group_stats(db, group_id, current_user.id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+    return GroupStatsResponse(
+        total_amount=raw["total_amount"],
+        total_expense_count=raw["total_expense_count"],
+        currency=raw["currency"],
+        member_stats=[
+            MemberStat(
+                user_id=r.user_id,
+                name=r.name,
+                avatar_url=r.avatar_url,
+                total_paid=r.total_paid,
+                total_owed=r.total_owed,
+                net_balance=r.net_balance,
+                outstanding_debt=r.outstanding_debt,
+                outstanding_receivable=r.outstanding_receivable,
+            )
+            for r in raw["member_stats"]
+        ],
+        category_breakdown=[
+            CategoryStat(
+                category=r.category,
+                total=r.total,
+                count=r.count,
+            )
+            for r in raw["category_breakdown"]
+        ],
+        monthly_trend=[
+            MonthlyTrend(
+                year_month=r.year_month,
+                total=r.total,
+                count=r.count,
+            )
+            for r in raw["monthly_trend"]
+        ],
+    )
 
 
 @router.patch("/{group_id}", response_model=GroupResponse, summary="Grubu güncelle", dependencies=[Depends(rate_limit("30/minute"))])

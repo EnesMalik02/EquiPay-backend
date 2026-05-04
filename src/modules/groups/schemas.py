@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from pydantic import BaseModel, EmailStr, model_validator
 
 from src.core.schemas import ORMSchema
@@ -30,6 +31,40 @@ class GroupWithStatsResponse(GroupResponse):
     balance_formatted: str
     balance_direction: str
     updated_at: datetime | None = None
+
+
+# ── Group Stats ──
+
+class MemberStat(BaseModel):
+    user_id: uuid.UUID
+    name: str
+    avatar_url: str | None = None
+    total_paid: Decimal
+    total_owed: Decimal
+    net_balance: Decimal
+    outstanding_debt: Decimal
+    outstanding_receivable: Decimal
+
+
+class CategoryStat(BaseModel):
+    category: str | None
+    total: Decimal
+    count: int
+
+
+class MonthlyTrend(BaseModel):
+    year_month: str
+    total: Decimal
+    count: int
+
+
+class GroupStatsResponse(BaseModel):
+    total_amount: Decimal
+    total_expense_count: int
+    currency: str
+    member_stats: list[MemberStat]
+    category_breakdown: list[CategoryStat]
+    monthly_trend: list[MonthlyTrend]
 
 
 # ── GroupMember ──

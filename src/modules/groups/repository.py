@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import func, select, or_, and_, tuple_
+from sqlalchemy import func, select, or_, and_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -161,3 +161,106 @@ async def get_active_member_counts(
         .group_by(GroupMember.group_id)
     )
     return {row.group_id: row.cnt for row in result}
+
+
+async def get_group_stats(db: AsyncSession, group_id: uuid.UUID) -> dict:
+    member_sql = text("""
+        WITH paid_stats AS (
+            SELECT paid_by AS user_id, SUM(amount) AS total_paid
+            FROM expenses
+            WHERE group_id = :gid AND deleted_at IS NULL
+            GROUP BY paid_by
+        ),
+        owed_stats AS (
+            SELECT es.user_id, SUM(es.owed_amount) AS total_owed
+            FROM expense_splits es
+            JOIN expenses e ON e.id = es.expense_id
+            WHERE e.group_id = :gid AND e.deleted_at IS NULL
+            GROUP BY es.user_id
+        ),
+        outstanding_debt_stats AS (
+            SELECT es.user_id,
+                   SUM(es.owed_amount - es.paid_amount) AS outstanding_debt
+            FROM expense_splits es
+            JOIN expenses e ON e.id = es.expense_id
+            WHERE e.group_id = :gid
+              AND e.deleted_at IS NULL
+              AND es.owed_amount > es.paid_amount
+            GROUP BY es.user_id
+        ),
+        outstanding_recv_stats AS (
+            SELECT e.paid_by AS user_id,
+                   SUM(es.owed_amount - es.paid_amount) AS outstanding_receivable
+            FROM expense_splits es
+            JOIN expenses e ON e.id = es.expense_id
+            WHERE e.group_id = :gid
+              AND e.deleted_at IS NULL
+              AND es.user_id != e.paid_by
+              AND es.owed_amount > es.paid_amount
+            GROUP BY e.paid_by
+        )
+        SELECT
+            gm.user_id,
+            COALESCE(u.display_name, u.username) AS name,
+            u.avatar_url,
+            COALESCE(ps.total_paid, 0)          AS total_paid,
+            COALESCE(os.total_owed, 0)           AS total_owed,
+            COALESCE(ps.total_paid, 0) - COALESCE(os.total_owed, 0) AS net_balance,
+            COALESCE(ds.outstanding_debt, 0)     AS outstanding_debt,
+            COALESCE(rs.outstanding_receivable, 0) AS outstanding_receivable
+        FROM group_members gm
+        JOIN users u ON u.id = gm.user_id
+        LEFT JOIN paid_stats ps            ON ps.user_id = gm.user_id
+        LEFT JOIN owed_stats os            ON os.user_id = gm.user_id
+        LEFT JOIN outstanding_debt_stats ds ON ds.user_id = gm.user_id
+        LEFT JOIN outstanding_recv_stats rs ON rs.user_id = gm.user_id
+        WHERE gm.group_id = :gid
+          AND gm.status = 'active'
+          AND gm.left_at IS NULL
+        ORDER BY net_balance DESC
+    """)
+
+    summary_sql = text("""
+        SELECT
+            COALESCE(SUM(amount), 0) AS total_amount,
+            COUNT(*) AS total_expense_count
+        FROM expenses
+        WHERE group_id = :gid AND deleted_at IS NULL
+    """)
+
+    category_sql = text("""
+        SELECT
+            category,
+            SUM(amount) AS total,
+            COUNT(*) AS count
+        FROM expenses
+        WHERE group_id = :gid AND deleted_at IS NULL
+        GROUP BY category
+        ORDER BY total DESC
+    """)
+
+    trend_sql = text("""
+        SELECT
+            TO_CHAR(expense_date, 'YYYY-MM') AS year_month,
+            SUM(amount)                      AS total,
+            COUNT(*)                         AS count
+        FROM expenses
+        WHERE group_id = :gid
+          AND deleted_at IS NULL
+          AND expense_date >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '5 months'
+        GROUP BY year_month
+        ORDER BY year_month
+    """)
+
+    member_rows = (await db.execute(member_sql, {"gid": group_id})).fetchall()
+    summary_row = (await db.execute(summary_sql, {"gid": group_id})).fetchone()
+    category_rows = (await db.execute(category_sql, {"gid": group_id})).fetchall()
+    trend_rows = (await db.execute(trend_sql, {"gid": group_id})).fetchall()
+
+    return {
+        "total_amount": summary_row.total_amount,
+        "total_expense_count": summary_row.total_expense_count,
+        "member_stats": member_rows,
+        "category_breakdown": category_rows,
+        "monthly_trend": trend_rows,
+    }
