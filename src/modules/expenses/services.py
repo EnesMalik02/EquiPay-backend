@@ -8,9 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.expenses import repository
 from src.modules.expenses.models import Expense, ExpenseSplit
 from src.modules.expenses.schemas import ExpenseSplitInput
+from src.modules.groups import public as groups_public
 
 
-async def create_expense(
+async def _create_expense(
     db: AsyncSession,
     *,
     group_id: uuid.UUID | None,
@@ -71,7 +72,7 @@ async def get_group_expenses(
     return await repository.get_by_group(db, group_id, limit=limit, cursor=cursor)
 
 
-async def update_expense(
+async def _update_expense_fields(
     db: AsyncSession,
     expense: Expense,
     *,
@@ -112,7 +113,7 @@ async def update_as_owner(
 ) -> Expense:
     if expense.paid_by != user_id:
         raise PermissionError("Yalnızca masrafı oluşturan güncelleyebilir.")
-    return await update_expense(
+    return await _update_expense_fields(
         db, expense,
         title=title,
         amount=amount,
@@ -285,3 +286,100 @@ async def get_user_balances_for_groups(
         gid: receivables.get(gid, Decimal("0")) - debts.get(gid, Decimal("0"))
         for gid in group_ids
     }
+
+
+# ── Orchestration (grup üyelik kontrolü + CRUD) ───────────────────────────
+
+async def _get_expense_or_404(db: AsyncSession, expense_id: uuid.UUID) -> Expense:
+    expense = await get_expense_by_id(db, expense_id)
+    if not expense:
+        raise LookupError("Masraf bulunamadı.")
+    return expense
+
+
+async def create_expense(
+    db: AsyncSession,
+    *,
+    group_id: uuid.UUID | None,
+    paid_by: uuid.UUID,
+    title: str,
+    amount: Decimal,
+    currency: str,
+    notes: str | None,
+    expense_date,
+    split_type: str,
+    category: str | None,
+    splits: list[ExpenseSplitInput],
+    current_user_id: uuid.UUID,
+) -> Expense:
+    await groups_public.require_group_member(db, group_id, current_user_id)
+    return await _create_expense(
+        db,
+        group_id=group_id,
+        paid_by=paid_by,
+        title=title,
+        amount=amount,
+        currency=currency,
+        notes=notes,
+        expense_date=expense_date,
+        split_type=split_type,
+        category=category,
+        splits=splits,
+    )
+
+
+async def list_group_expenses(
+    db: AsyncSession,
+    group_id: uuid.UUID,
+    user_id: uuid.UUID,
+    *,
+    limit: int,
+    cursor: str | None = None,
+):
+    await groups_public.require_group_member(db, group_id, user_id)
+    return await get_group_expenses(db, group_id, limit=limit, cursor=cursor)
+
+
+async def get_expense(
+    db: AsyncSession,
+    expense_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> Expense:
+    expense = await _get_expense_or_404(db, expense_id)
+    await groups_public.require_group_member(db, expense.group_id, user_id)
+    return expense
+
+
+async def update_expense(
+    db: AsyncSession,
+    expense_id: uuid.UUID,
+    user_id: uuid.UUID,
+    *,
+    title: str | None,
+    amount: Decimal | None,
+    currency: str | None,
+    notes: str | None,
+    expense_date,
+    category: str | None,
+) -> Expense:
+    expense = await _get_expense_or_404(db, expense_id)
+    await groups_public.require_group_member(db, expense.group_id, user_id)
+    return await update_as_owner(
+        db, expense, user_id,
+        title=title,
+        amount=amount,
+        currency=currency,
+        notes=notes,
+        expense_date=expense_date,
+        category=category,
+    )
+
+
+async def delete_expense(
+    db: AsyncSession,
+    expense_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> None:
+    expense = await _get_expense_or_404(db, expense_id)
+    await groups_public.require_group_member(db, expense.group_id, user_id)
+    await delete_as_owner(db, expense, user_id)

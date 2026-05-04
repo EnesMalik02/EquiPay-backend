@@ -26,7 +26,6 @@ from src.modules.expenses.schemas import (
 )
 from src.modules.expenses import services
 from src.modules.users.models import User
-from src.services import expense_queries
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
 
@@ -77,7 +76,7 @@ async def create_expense(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        return await expense_queries.create_expense(
+        return await services.create_expense(
             db,
             group_id=data.group_id,
             paid_by=data.paid_by,
@@ -111,7 +110,7 @@ async def list_group_expenses(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        page = await expense_queries.list_group_expenses(
+        page = await services.list_group_expenses(
             db, group_id, current_user.id, limit=limit, cursor=cursor
         )
         return CursorPage(
@@ -194,7 +193,7 @@ async def get_expense(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        exp = await expense_queries.get_expense(db, expense_id, current_user.id)
+        exp = await services.get_expense(db, expense_id, current_user.id)
         return _build_expense_full_detail(exp)
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
@@ -215,7 +214,7 @@ async def update_expense(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        return await expense_queries.update_expense(
+        return await services.update_expense(
             db, expense_id, current_user.id,
             title=data.title,
             amount=data.amount,
@@ -242,7 +241,7 @@ async def delete_expense(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        await expense_queries.delete_expense(db, expense_id, current_user.id)
+        await services.delete_expense(db, expense_id, current_user.id)
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except PermissionError as exc:
