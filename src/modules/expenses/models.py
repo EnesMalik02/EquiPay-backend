@@ -59,6 +59,9 @@ class Expense(Base):
     category: Mapped[Optional[str]] = mapped_column(
         String(20), nullable=True
     )
+    receipt_url: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )
     deleted_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

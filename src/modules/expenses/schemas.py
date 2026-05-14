@@ -26,6 +26,7 @@ class ExpenseCreate(BaseModel):
     expense_date: date | None = None
     split_type: str = "equal"
     category: str | None = None
+    receipt_key: str | None = None
     splits: list[ExpenseSplitInput]
 
     @field_validator("amount")
@@ -113,6 +114,7 @@ class ExpenseResponse(ORMSchema):
     expense_date: date | None = None
     split_type: str
     category: str | None = None
+    receipt_url: str | None = None
     is_fully_paid: bool
     created_at: datetime | None = None
 
@@ -148,6 +150,11 @@ class SplitDetailItem(ORMSchema):
     status: str  # "paid" | "pending"
 
 
+class ReceiptUploadResponse(BaseModel):
+    receipt_url: str
+    receipt_key: str | None = None
+
+
 class ExpenseFullDetailResponse(ORMSchema):
     id: uuid.UUID
     group: GroupDetail | None
@@ -159,6 +166,7 @@ class ExpenseFullDetailResponse(ORMSchema):
     expense_date: date | None = None
     split_type: str
     category: str | None = None
+    receipt_url: str | None = None
     created_at: datetime | None = None
     splits: list[SplitDetailItem] = []
 

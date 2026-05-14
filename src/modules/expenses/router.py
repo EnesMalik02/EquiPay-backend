@@ -1,7 +1,10 @@
+import logging
 import uuid
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from src.core.database import get_db
 from src.core.pagination import CursorPage
@@ -18,12 +21,14 @@ from src.modules.expenses.schemas import (
     GroupDetail,
     PaidByBrief,
     PaidByDetail,
+    ReceiptUploadResponse,
     SplitUserBrief,
     SplitDetailItem,
     UserAmount,
     ExpenseSplitPayRequest,
     ExpenseSplitResponse,
 )
+from src.services import storage
 from src.modules.expenses import services
 from src.modules.users.models import User
 
@@ -64,6 +69,28 @@ def _build_with_my_split(exp: Expense, user_id: uuid.UUID) -> ExpenseWithMySplit
 
 
 @router.post(
+    "/receipt/upload-temp",
+    response_model=ReceiptUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Expense oluşturmadan önce fiş yükle (geçici)",
+    dependencies=[Depends(rate_limit("20/minute"))],
+)
+async def upload_temp_receipt(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    content = await file.read()
+    try:
+        key, url = await storage.upload_temp(content, file.content_type or "")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except Exception as exc:
+        logger.exception("Temp receipt upload failed: %s", exc)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Dosya yüklenemedi: {exc}")
+    return ReceiptUploadResponse(receipt_url=url, receipt_key=key)
+
+
+@router.post(
     "",
     response_model=ExpenseResponse,
     status_code=status.HTTP_201_CREATED,
@@ -75,6 +102,10 @@ async def create_expense(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    receipt_url: str | None = None
+    if data.receipt_key:
+        receipt_url = storage.public_url(storage.temp_path(data.receipt_key))
+
     try:
         return await services.create_expense(
             db,
@@ -87,6 +118,7 @@ async def create_expense(
             expense_date=data.expense_date,
             split_type=data.split_type,
             category=data.category,
+            receipt_url=receipt_url,
             splits=data.splits,
             current_user_id=current_user.id,
         )
@@ -176,6 +208,7 @@ def _build_expense_full_detail(exp: Expense) -> ExpenseFullDetailResponse:
         expense_date=exp.expense_date,
         split_type=exp.split_type,
         category=exp.category,
+        receipt_url=exp.receipt_url,
         created_at=exp.created_at,
         splits=splits,
     )
@@ -246,6 +279,68 @@ async def delete_expense(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+
+
+@router.put(
+    "/{expense_id}/receipt",
+    response_model=ReceiptUploadResponse,
+    summary="Fiş yükle veya değiştir",
+    dependencies=[Depends(rate_limit("20/minute"))],
+)
+async def upload_receipt(
+    expense_id: uuid.UUID,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        exp = await services.get_expense(db, expense_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+
+    if exp.paid_by != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca masrafı oluşturan fiş yükleyebilir.")
+
+    content = await file.read()
+    try:
+        url = await storage.upload_receipt(str(expense_id), content, file.content_type or "")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except Exception as exc:
+        logger.exception("Receipt upload failed for expense %s: %s", expense_id, exc)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Dosya yüklenemedi: {exc}")
+
+    exp.receipt_url = url
+    await db.commit()
+    return ReceiptUploadResponse(receipt_url=url)
+
+
+@router.delete(
+    "/{expense_id}/receipt",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Fişi sil",
+    dependencies=[Depends(rate_limit("20/minute"))],
+)
+async def delete_receipt(
+    expense_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        exp = await services.get_expense(db, expense_id, current_user.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+
+    if exp.paid_by != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca masrafı oluşturan fişi silebilir.")
+
+    await storage.delete_receipt(str(expense_id))
+    exp.receipt_url = None
+    await db.commit()
 
 
 @router.patch(

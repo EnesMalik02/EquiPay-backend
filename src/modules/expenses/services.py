@@ -23,6 +23,7 @@ async def _create_expense(
     expense_date=None,
     split_type: str = "equal",
     category: str | None = None,
+    receipt_url: str | None = None,
     splits: list[ExpenseSplitInput],
 ) -> Expense:
     split_total = sum(s.owed_amount for s in splits)
@@ -39,6 +40,7 @@ async def _create_expense(
         expense_date=expense_date,
         split_type=split_type,
         category=category,
+        receipt_url=receipt_url,
     )
     db.add(expense)
     await db.flush()
@@ -309,6 +311,7 @@ async def create_expense(
     expense_date,
     split_type: str,
     category: str | None,
+    receipt_url: str | None,
     splits: list[ExpenseSplitInput],
     current_user_id: uuid.UUID,
 ) -> Expense:
@@ -324,6 +327,7 @@ async def create_expense(
         expense_date=expense_date,
         split_type=split_type,
         category=category,
+        receipt_url=receipt_url,
         splits=splits,
     )
 

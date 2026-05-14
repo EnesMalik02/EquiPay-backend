@@ -15,6 +15,10 @@ class Settings(BaseSettings):
 
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000","https://equi-pay-web.vercel.app"]
 
+    SUPABASE_URL: str = ""
+    SUPABASE_SERVICE_KEY: str = ""
+    SUPABASE_RECEIPT_BUCKET: str = "expense-receipts"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
