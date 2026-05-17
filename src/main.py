@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.config import settings
 from src.core.exceptions import AppError, app_error_handler, http_exception_handler, validation_error_handler
 from src.core.lifespan import lifespan
+from src.core.middleware import RequestContextMiddleware
 from src.modules.auth.router import router as auth_router
 from src.modules.users.router import router as users_router
 from src.modules.groups.router import router as groups_router
@@ -18,6 +19,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(RequestContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
