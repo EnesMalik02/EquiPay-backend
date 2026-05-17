@@ -4,6 +4,7 @@ Diğer modüller yalnızca bu dosyadan import yapabilir.
 """
 import uuid
 
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.groups import services
@@ -22,4 +23,7 @@ async def require_group_member(
         return
     member = await services.get_member(db, group_id, user_id)
     if not member:
-        raise PermissionError("Bu grubun üyesi değilsiniz.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bu grubun üyesi değilsiniz.",
+        )

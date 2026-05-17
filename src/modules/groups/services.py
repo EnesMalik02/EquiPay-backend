@@ -2,15 +2,22 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.pagination import encode_cursor, decode_cursor
 from src.modules.currencies.formatting import format_balance
-from src.modules.expenses import services as expenses_services
+from src.modules.expenses import public as expenses_public
 from src.modules.groups import repository
 from src.modules.groups.models import Group, GroupMember
-from src.modules.notifications import repository as notifications_repository
-from src.modules.users import services as users_services
+from src.modules.groups.schemas import (
+    CategoryStat,
+    GroupStatsResponse,
+    MemberStat,
+    MonthlyTrend,
+)
+from src.modules.notifications import public as notifications_public
+from src.modules.users import public as users_public
 
 
 # ── Group CRUD ───────────────────────────────────────────────────────────
@@ -48,6 +55,8 @@ async def get_user_groups_with_stats(
     limit: int = 30,
     cursor: str | None = None,
 ) -> dict:
+    limit = max(1, min(limit, 30))
+
     cursor_updated_at = None
     cursor_id = None
     if cursor:
@@ -72,7 +81,7 @@ async def get_user_groups_with_stats(
 
     group_ids = [g.id for g in groups]
     member_counts = await repository.get_active_member_counts(db, group_ids)
-    balances = await expenses_services.get_user_balances_for_groups(db, group_ids, user_id)
+    balances = await expenses_public.get_user_balances_for_groups(db, group_ids, user_id)
 
     items = []
     for g in groups:
@@ -97,12 +106,12 @@ async def get_user_groups_with_stats(
 
 async def get_group_with_stats(
     db: AsyncSession, group_id: uuid.UUID, user_id: uuid.UUID
-) -> dict | None:
+) -> dict:
     group = await repository.get_by_id(db, group_id)
     if not group:
-        return None
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
     member_count = await repository.get_active_member_count(db, group_id)
-    balances = await expenses_services.get_user_balances_for_groups(db, [group_id], user_id)
+    balances = await expenses_public.get_user_balances_for_groups(db, [group_id], user_id)
     raw = balances.get(group_id, Decimal("0"))
     formatted, direction = format_balance(raw, group.currency_code)
     return {
@@ -118,24 +127,29 @@ async def get_group_with_stats(
 
 
 async def get_user_group_ids(db: AsyncSession, user_id: uuid.UUID) -> list[uuid.UUID]:
-    """Kullanıcının aktif üyesi olduğu grup id'lerini döndürür."""
     return await repository.get_user_group_ids(db, user_id)
 
 
 async def get_pending_invitation_group_ids(
     db: AsyncSession, user_id: uuid.UUID
 ) -> list[uuid.UUID]:
-    """Kullanıcının yanıtlamadığı davetlerin group_id listesini döndürür."""
     return await repository.get_pending_invitation_group_ids(db, user_id)
 
 
 async def update_group(
     db: AsyncSession,
-    group: Group,
+    group_id: uuid.UUID,
+    user_id: uuid.UUID,
     *,
     name: str | None = None,
     description: str | None = None,
 ) -> Group:
+    group = await repository.get_by_id(db, group_id)
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
+    member = await repository.get_member(db, group_id, user_id)
+    if not member or member.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca admin güncelleyebilir.")
     if name is not None:
         group.name = name
     if description is not None:
@@ -162,41 +176,41 @@ async def add_member(
     user_id: uuid.UUID | None = None,
     role: str = "member",
 ) -> GroupMember:
-    """
-    Gruba üye ekler. Davet eden ile davet edilen arkadaşsa direkt aktif,
-    değilse pending durumunda eklenir ve bildirim gönderilir.
-    """
+    group = await repository.get_by_id(db, group_id)
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
+
     if user_id is None:
         if email:
-            user = await users_services.get_by_email(db, email)
+            user = await users_public.get_by_email(db, email)
             if not user:
-                raise LookupError("Bu email adresine kayıtlı kullanıcı bulunamadı.")
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bu email adresine kayıtlı kullanıcı bulunamadı.")
         else:
-            user = await users_services.get_by_username(db, username)
+            user = await users_public.get_by_username(db, username)
             if not user:
-                raise LookupError("Bu kullanıcı adına kayıtlı kullanıcı bulunamadı.")
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bu kullanıcı adına kayıtlı kullanıcı bulunamadı.")
         user_id = user.id
 
     existing = await repository.get_existing_membership(db, group_id, user_id)
     if existing:
         if existing.left_at is None:
             if existing.status == "pending":
-                raise ValueError("Kullanıcıya davet gönderildi, yanıt bekleniyor.")
-            raise ValueError("Kullanıcı zaten bu grubun aktif üyesi.")
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Kullanıcıya davet gönderildi, yanıt bekleniyor.")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Kullanıcı zaten bu grubun aktif üyesi.")
         existing.left_at = None
         existing.role = role
         existing.status = await _resolve_member_status(db, invited_by, user_id)
         await db.flush()
         if existing.status == "pending":
-            await _send_invitation_notification(db, group_id=group_id, user_id=user_id, invited_by=invited_by)
+            await _send_invitation_notification(db, group=group, user_id=user_id, invited_by=invited_by)
         return await repository.get_member_with_user(db, existing.id)
 
-    status = await _resolve_member_status(db, invited_by, user_id)
-    member = GroupMember(group_id=group_id, user_id=user_id, role=role, status=status)
+    member_status = await _resolve_member_status(db, invited_by, user_id)
+    member = GroupMember(group_id=group_id, user_id=user_id, role=role, status=member_status)
     db.add(member)
     await db.flush()
-    if status == "pending":
-        await _send_invitation_notification(db, group_id=group_id, user_id=user_id, invited_by=invited_by)
+    if member_status == "pending":
+        await _send_invitation_notification(db, group=group, user_id=user_id, invited_by=invited_by)
     return await repository.get_member_with_user(db, member.id)
 
 
@@ -209,22 +223,18 @@ async def _resolve_member_status(
 async def _send_invitation_notification(
     db: AsyncSession,
     *,
-    group_id: uuid.UUID,
+    group: Group,
     user_id: uuid.UUID,
     invited_by: uuid.UUID,
 ) -> None:
-    inviter = await users_services.get_by_id(db, invited_by)
-    group = await repository.get_by_id(db, group_id)
-    await notifications_repository.create(
+    inviter = await users_public.get_by_id(db, invited_by)
+    await notifications_public.send_group_invitation(
         db,
         user_id=user_id,
-        type="group_invitation",
-        data={
-            "group_id": str(group_id),
-            "group_name": group.name if group else "",
-            "invited_by_id": str(invited_by),
-            "invited_by_name": inviter.display_name or inviter.username if inviter else "",
-        },
+        group_id=group.id,
+        group_name=group.name,
+        invited_by_id=invited_by,
+        invited_by_name=inviter.display_name or inviter.username if inviter else "",
     )
 
 
@@ -234,16 +244,20 @@ async def respond_to_invitation(
     group_id: uuid.UUID,
     user_id: uuid.UUID,
     accept: bool,
-) -> None:
+) -> str:
+    group = await repository.get_by_id(db, group_id)
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
     member = await repository.get_pending_invitation(db, group_id, user_id)
     if not member:
-        raise LookupError("Bekleyen bir grup daveti bulunamadı.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bekleyen bir grup daveti bulunamadı.")
     if accept:
         member.status = "active"
         await db.flush()
-    else:
-        member.left_at = datetime.now(timezone.utc)
-        await db.flush()
+        return "Gruba katıldınız."
+    member.left_at = datetime.now(timezone.utc)
+    await db.flush()
+    return "Davet reddedildi."
 
 
 async def get_group_members(db: AsyncSession, group_id: uuid.UUID) -> list[GroupMember]:
@@ -262,55 +276,105 @@ async def remove_member(db: AsyncSession, member: GroupMember) -> None:
 
 
 async def update_member_role(
-    db: AsyncSession, member: GroupMember, *, role: str
+    db: AsyncSession,
+    group_id: uuid.UUID,
+    requester_id: uuid.UUID,
+    target_user_id: uuid.UUID,
+    *,
+    role: str,
 ) -> GroupMember:
-    member.role = role
+    group = await repository.get_by_id(db, group_id)
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
+    requester = await repository.get_member(db, group_id, requester_id)
+    if not requester or requester.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca admin rol değişikliği yapabilir.")
+    target = await repository.get_member(db, group_id, target_user_id)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Üye bulunamadı.")
+    target.role = role
     await db.flush()
-    await db.refresh(member)
-    return member
+    await db.refresh(target)
+    return target
 
 
 # ── Group lifecycle ──────────────────────────────────────────────────────
 
-async def delete_group(db: AsyncSession, group: Group) -> None:
-    if await expenses_services.has_unsettled_balance(db, group.id):
-        raise ValueError("Grupta açık borçlar var. Önce tüm bakiyeleri kapatın.")
+async def delete_group(db: AsyncSession, group_id: uuid.UUID, user_id: uuid.UUID) -> None:
+    group = await repository.get_by_id(db, group_id)
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
+    member = await repository.get_member(db, group_id, user_id)
+    if not member or member.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca admin rolündeki üye grubu silebilir.")
+    if await expenses_public.has_unsettled_balance(db, group_id):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Grupta açık borçlar var. Önce tüm bakiyeleri kapatın.")
     await soft_delete_group(db, group)
 
 
-async def leave_group(db: AsyncSession, group: Group, user_id: uuid.UUID) -> dict:
-    receivable = await expenses_services.get_user_outstanding_receivable(db, group.id, user_id)
-    debt = await expenses_services.get_user_outstanding_debt(db, group.id, user_id)
+async def leave_group(db: AsyncSession, group_id: uuid.UUID, user_id: uuid.UUID) -> str:
+    group = await repository.get_by_id(db, group_id)
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
+
+    receivable = await expenses_public.get_user_outstanding_receivable(db, group_id, user_id)
+    debt = await expenses_public.get_user_outstanding_debt(db, group_id, user_id)
 
     if receivable != Decimal("0") or debt != Decimal("0"):
-        raise ValueError(
-            "Gruptan çıkabilmek için bakiyenizin sıfır olması gerekir. "
-            f"Alacak: {receivable}, Borç: {debt}"
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Gruptan çıkabilmek için bakiyenizin sıfır olması gerekir. Alacak: {receivable}, Borç: {debt}",
         )
 
-    member = await repository.get_member(db, group.id, user_id)
+    member = await repository.get_member(db, group_id, user_id)
     if not member:
-        raise LookupError("Bu grupta aktif üyeliğiniz bulunamadı.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bu grupta aktif üyeliğiniz bulunamadı.")
 
     if member.role == "admin":
-        active_count = await repository.get_active_member_count(db, group.id)
+        active_count = await repository.get_active_member_count(db, group_id)
         if active_count > 1:
-            raise PermissionError("Gruptan çıkmadan önce başka bir üyeye admin rolü atayın.")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Gruptan çıkmadan önce başka bir üyeye admin rolü atayın.")
         member.left_at = datetime.now(timezone.utc)
         await soft_delete_group(db, group)
-        return {"action": "group_deleted"}
+        return "Son üyesiniz; grup silindi."
 
     member.left_at = datetime.now(timezone.utc)
     await db.flush()
-    return {"action": "left"}
+    return "Gruptan başarıyla çıkıldı."
 
 
 async def get_group_stats(
     db: AsyncSession, group_id: uuid.UUID, user_id: uuid.UUID
-) -> dict:
+) -> GroupStatsResponse:
     from src.modules.groups import public as groups_public
     await groups_public.require_group_member(db, group_id, user_id)
     group = await repository.get_by_id(db, group_id)
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
     stats = await repository.get_group_stats(db, group_id)
-    stats["currency"] = group.currency_code if group else "TRY"
-    return stats
+    return GroupStatsResponse(
+        total_amount=stats["total_amount"],
+        total_expense_count=stats["total_expense_count"],
+        currency=group.currency_code,
+        member_stats=[
+            MemberStat(
+                user_id=r.user_id,
+                name=r.name,
+                avatar_url=r.avatar_url,
+                total_paid=r.total_paid,
+                total_owed=r.total_owed,
+                net_balance=r.net_balance,
+                outstanding_debt=r.outstanding_debt,
+                outstanding_receivable=r.outstanding_receivable,
+            )
+            for r in stats["member_stats"]
+        ],
+        category_breakdown=[
+            CategoryStat(category=r.category, total=r.total, count=r.count)
+            for r in stats["category_breakdown"]
+        ],
+        monthly_trend=[
+            MonthlyTrend(year_month=r.year_month, total=r.total, count=r.count)
+            for r in stats["monthly_trend"]
+        ],
+    )

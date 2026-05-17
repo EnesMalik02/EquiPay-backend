@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
@@ -81,10 +81,7 @@ async def get_settlement(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    settlement = await services.get_settlement_by_id(db, settlement_id)
-    if not settlement:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ödeme kaydı bulunamadı.")
-    return settlement
+    return await services.get_settlement_by_id(db, settlement_id)
 
 
 @router.patch(
@@ -100,14 +97,4 @@ async def update_settlement_status(
     db: AsyncSession = Depends(get_db),
 ):
     settlement = await services.get_settlement_by_id(db, settlement_id)
-    if not settlement:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ödeme kaydı bulunamadı.")
-
-    try:
-        services.validate_status_transition(settlement, data.status, actor_id=current_user.id)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    except PermissionError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
-
-    return await services.update_settlement_status(db, settlement, new_status=data.status)
+    return await services.apply_status_update(db, settlement, data.status, current_user.id)

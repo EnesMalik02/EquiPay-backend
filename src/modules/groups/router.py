@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
@@ -14,9 +14,6 @@ from src.modules.groups.schemas import (
     GroupResponse,
     GroupWithStatsResponse,
     GroupStatsResponse,
-    MemberStat,
-    CategoryStat,
-    MonthlyTrend,
     GroupMemberAdd,
     GroupMemberRoleUpdate,
     GroupMemberResponse,
@@ -41,14 +38,13 @@ async def create_group(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    group = await services.create_group(
+    return await services.create_group(
         db,
         name=data.name,
         description=data.description,
         created_by=current_user.id,
         currency_code=data.currency_code,
     )
-    return group
 
 
 @router.get("", response_model=CursorPage[GroupWithStatsResponse], summary="Kullanıcının gruplarını listele", dependencies=[Depends(rate_limit("60/minute"))])
@@ -58,7 +54,6 @@ async def list_my_groups(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    limit = max(1, min(limit, 30))
     return await services.get_user_groups_with_stats(db, current_user.id, limit=limit, cursor=cursor)
 
 
@@ -68,10 +63,7 @@ async def get_group(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    group = await services.get_group_with_stats(db, group_id, current_user.id)
-    if not group:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
-    return group
+    return await services.get_group_with_stats(db, group_id, current_user.id)
 
 
 @router.get(
@@ -85,47 +77,7 @@ async def get_group_stats(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    try:
-        raw = await services.get_group_stats(db, group_id, current_user.id)
-    except PermissionError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
-    except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-
-    return GroupStatsResponse(
-        total_amount=raw["total_amount"],
-        total_expense_count=raw["total_expense_count"],
-        currency=raw["currency"],
-        member_stats=[
-            MemberStat(
-                user_id=r.user_id,
-                name=r.name,
-                avatar_url=r.avatar_url,
-                total_paid=r.total_paid,
-                total_owed=r.total_owed,
-                net_balance=r.net_balance,
-                outstanding_debt=r.outstanding_debt,
-                outstanding_receivable=r.outstanding_receivable,
-            )
-            for r in raw["member_stats"]
-        ],
-        category_breakdown=[
-            CategoryStat(
-                category=r.category,
-                total=r.total,
-                count=r.count,
-            )
-            for r in raw["category_breakdown"]
-        ],
-        monthly_trend=[
-            MonthlyTrend(
-                year_month=r.year_month,
-                total=r.total,
-                count=r.count,
-            )
-            for r in raw["monthly_trend"]
-        ],
-    )
+    return await services.get_group_stats(db, group_id, current_user.id)
 
 
 @router.patch("/{group_id}", response_model=GroupResponse, summary="Grubu güncelle", dependencies=[Depends(rate_limit("30/minute"))])
@@ -135,13 +87,7 @@ async def update_group(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    group = await services.get_group_by_id(db, group_id)
-    if not group:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
-    member = await services.get_member(db, group_id, current_user.id)
-    if not member or member.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca admin güncelleyebilir.")
-    return await services.update_group(db, group, name=data.name, description=data.description)
+    return await services.update_group(db, group_id, current_user.id, name=data.name, description=data.description)
 
 
 @router.delete(
@@ -161,23 +107,8 @@ async def delete_group(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    group = await services.get_group_by_id(db, group_id)
-    if not group:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
+    await services.delete_group(db, group_id, current_user.id)
 
-    member = await services.get_member(db, group_id, current_user.id)
-    if not member or member.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Yalnızca admin rolündeki üye grubu silebilir.",
-        )
-    try:
-        await services.delete_group(db, group)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
-
-
-# ── Leave Group ─────────────────────────────────────────────────────────
 
 @router.post(
     "/{group_id}/leave",
@@ -197,25 +128,9 @@ async def leave_group(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    group = await services.get_group_by_id(db, group_id)
-    if not group:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
+    message = await services.leave_group(db, group_id, current_user.id)
+    return MessageResponse(message=message)
 
-    try:
-        result = await services.leave_group(db, group, user_id=current_user.id)
-    except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except PermissionError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
-
-    if result["action"] == "group_deleted":
-        return MessageResponse(message="Son üyesiniz; grup silindi.")
-    return MessageResponse(message="Gruptan başarıyla çıkıldı.")
-
-
-# ── Member Role ──────────────────────────────────────────────────────────
 
 @router.patch(
     "/{group_id}/members/{user_id}/role",
@@ -231,25 +146,8 @@ async def update_member_role(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    group = await services.get_group_by_id(db, group_id)
-    if not group:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
+    return await services.update_member_role(db, group_id, current_user.id, user_id, role=data.role)
 
-    requester = await services.get_member(db, group_id, current_user.id)
-    if not requester or requester.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Yalnızca admin rol değişikliği yapabilir.",
-        )
-
-    target = await services.get_member(db, group_id, user_id)
-    if not target:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Üye bulunamadı.")
-
-    return await services.update_member_role(db, target, role=data.role)
-
-
-# ── Group Members ──
 
 @router.post(
     "/{group_id}/members",
@@ -264,23 +162,14 @@ async def add_member(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    group = await services.get_group_by_id(db, group_id)
-    if not group:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
-
-    try:
-        return await services.add_member(
-            db,
-            group_id=group_id,
-            invited_by=current_user.id,
-            email=data.email,
-            username=data.username,
-            role=data.role,
-        )
-    except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    return await services.add_member(
+        db,
+        group_id=group_id,
+        invited_by=current_user.id,
+        email=data.email,
+        username=data.username,
+        role=data.role,
+    )
 
 
 @router.get(
@@ -310,21 +199,10 @@ async def respond_to_invitation(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if data.action not in ("accept", "decline"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="action 'accept' veya 'decline' olmalıdır.",
-        )
-    group = await services.get_group_by_id(db, group_id)
-    if not group:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
-    try:
-        await services.respond_to_invitation(
-            db,
-            group_id=group_id,
-            user_id=current_user.id,
-            accept=data.action == "accept",
-        )
-    except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    return MessageResponse(message="Gruba katıldınız." if data.action == "accept" else "Davet reddedildi.")
+    message = await services.respond_to_invitation(
+        db,
+        group_id=group_id,
+        user_id=current_user.id,
+        accept=data.action == "accept",
+    )
+    return MessageResponse(message=message)

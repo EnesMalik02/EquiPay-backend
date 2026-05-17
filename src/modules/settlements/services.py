@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.settlements import repository
@@ -36,8 +37,11 @@ async def create_settlement(
 
 async def get_settlement_by_id(
     db: AsyncSession, settlement_id: uuid.UUID
-) -> Settlement | None:
-    return await repository.get_by_id(db, settlement_id)
+) -> Settlement:
+    settlement = await repository.get_by_id(db, settlement_id)
+    if not settlement:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ödeme kaydı bulunamadı.")
+    return settlement
 
 
 async def get_group_settlements(
@@ -64,13 +68,13 @@ def validate_status_transition(
     settlement: Settlement, new_status: str, actor_id: uuid.UUID
 ) -> None:
     if new_status not in _VALID_STATUSES:
-        raise ValueError(f"Geçersiz durum. Geçerli durumlar: {', '.join(sorted(_VALID_STATUSES))}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Geçersiz durum. Geçerli durumlar: {', '.join(sorted(_VALID_STATUSES))}")
 
     if new_status in {"confirmed", "rejected"} and settlement.receiver_id != actor_id:
-        raise PermissionError("Yalnızca alıcı bu işlemi yapabilir.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca alıcı bu işlemi yapabilir.")
 
     if new_status == "cancelled" and settlement.payer_id != actor_id:
-        raise PermissionError("Yalnızca gönderen iptal edebilir.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca gönderen iptal edebilir.")
 
 
 async def update_settlement_status(
@@ -82,3 +86,13 @@ async def update_settlement_status(
     await db.flush()
     await db.refresh(settlement)
     return settlement
+
+
+async def apply_status_update(
+    db: AsyncSession,
+    settlement: Settlement,
+    new_status: str,
+    actor_id: uuid.UUID,
+) -> Settlement:
+    validate_status_transition(settlement, new_status, actor_id=actor_id)
+    return await update_settlement_status(db, settlement, new_status=new_status)

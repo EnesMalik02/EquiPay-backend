@@ -1,13 +1,13 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.core.ratelimit import rate_limit
 from src.core.security import get_current_user
 from src.modules.users.models import User
-from src.modules.notifications import repository, service
+from src.modules.notifications import service
 from src.modules.notifications.schemas import NotificationResponse
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
@@ -37,6 +37,4 @@ async def mark_notification_read(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    found = await repository.mark_read(db, notification_id, current_user.id)
-    if not found:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bildirim bulunamadı.")
+    await service.mark_notification_read(db, notification_id, current_user.id)

@@ -1,22 +1,15 @@
-import uuid
-
-import jwt
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy.exc import IntegrityError
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.config import settings
 from src.core.database import get_db
 from src.core.security import (
     create_access_token,
     create_refresh_token,
     get_current_user,
     get_refresh_token_from_request,
-    verify_password,
 )
 from src.modules.auth import services
 from src.modules.auth.schemas import TokenResponse, UserLoginRequest, UserRegisterRequest
-from src.modules.users import services as user_services
 from src.modules.users.models import User
 from src.core.ratelimit import rate_limit
 from src.modules.users.schemas import UserResponse
@@ -42,26 +35,8 @@ async def register(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
-    if await services.get_user_by_email(db, data.email):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bu email adresi zaten kayıtlı.")
-
-    if await services.get_user_by_username(db, data.username):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bu kullanıcı adı zaten alınmış.")
-
-    try:
-        user = await services.create_user(
-            db,
-            email=data.email,
-            password=data.password,
-            username=data.username,
-        )
-        await db.commit()
-        await db.refresh(user)
-    except IntegrityError:
-        await db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Kayıt sırasında bir çakışma oluştu.")
-
-    return set_tokens_in_response(request, response, str(user.id))
+    user_id = await services.register(db, email=data.email, password=data.password, username=data.username)
+    return set_tokens_in_response(request, response, str(user_id))
 
 
 @router.post("/login", response_model=TokenResponse, summary="User Login", dependencies=[Depends(rate_limit("10/minute"))])
@@ -71,11 +46,8 @@ async def login(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
-    user = await services.get_user_by_identifier(db, data.identifier)
-    if not user or not verify_password(data.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email/username or password is incorrect.")
-
-    return set_tokens_in_response(request, response, str(user.id))
+    user_id = await services.authenticate(db, data.identifier, data.password)
+    return set_tokens_in_response(request, response, str(user_id))
 
 
 @router.post("/refresh", response_model=TokenResponse, summary="Refresh Token ile Yeni Access Token Alma", dependencies=[Depends(rate_limit("20/minute"))])
@@ -85,27 +57,8 @@ async def refresh_token(
     db: AsyncSession = Depends(get_db),
 ):
     token = get_refresh_token_from_request(request)
-
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None or payload.get("type") != "refresh":
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Geçersiz refresh token türü veya içeriği.")
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token süresi dolmuş. Lütfen tekrar giriş yapın.")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Geçersiz refresh token.")
-
-    try:
-        user_uuid = uuid.UUID(user_id)
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Geçersiz kullanıcı kimliği.")
-
-    user = await services.get_user_by_id(db, user_uuid)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Kullanıcı bulunamadı.")
-
-    return set_tokens_in_response(request, response, str(user.id))
+    user_id = await services.validate_refresh_token(db, token)
+    return set_tokens_in_response(request, response, str(user_id))
 
 
 @router.get("/me", response_model=UserResponse, summary="Giriş Yapan Kullanıcı Bilgileri", dependencies=[Depends(rate_limit("60/minute"))])

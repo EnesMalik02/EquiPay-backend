@@ -1,5 +1,6 @@
 import uuid
 
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.groups import public as groups_public
@@ -31,3 +32,11 @@ async def get_active_notifications(
 
     unread.sort(key=lambda n: n.created_at, reverse=True)
     return unread
+
+
+async def mark_notification_read(
+    db: AsyncSession, notification_id: uuid.UUID, user_id: uuid.UUID
+) -> None:
+    found = await repository.mark_read(db, notification_id, user_id)
+    if not found:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bildirim bulunamadı.")

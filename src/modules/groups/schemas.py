@@ -1,6 +1,8 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
+
 from pydantic import BaseModel, EmailStr, model_validator
 
 from src.core.schemas import ORMSchema
@@ -105,7 +107,7 @@ class GroupMemberAddResponse(ORMSchema):
 
 
 class GroupInvitationRespond(BaseModel):
-    action: str  # "accept" | "decline"
+    action: Literal["accept", "decline"]
 
 
 class GroupMemberListResponse(ORMSchema):

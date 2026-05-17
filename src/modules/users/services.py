@@ -19,6 +19,10 @@ async def get_by_username(db: AsyncSession, username: str) -> User | None:
     return await repository.get_by_username(db, username)
 
 
+async def get_by_identifier(db: AsyncSession, identifier: str) -> User | None:
+    return await repository.get_by_identifier(db, identifier)
+
+
 async def search_by_email(
     db: AsyncSession, email: str, *, exclude_id: uuid.UUID, limit: int = 10
 ) -> list[User]:
