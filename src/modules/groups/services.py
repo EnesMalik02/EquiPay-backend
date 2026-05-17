@@ -5,6 +5,7 @@ from decimal import Decimal
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.cache import cache, CacheKeys, CacheTTL
 from src.core.pagination import encode_cursor, decode_cursor
 from src.modules.currencies.formatting import format_balance
 from src.modules.expenses import public as expenses_public
@@ -13,6 +14,7 @@ from src.modules.groups.models import Group, GroupMember
 from src.modules.groups.schemas import (
     CategoryStat,
     GroupStatsResponse,
+    GroupWithStatsResponse,
     MemberStat,
     MonthlyTrend,
 )
@@ -106,7 +108,12 @@ async def get_user_groups_with_stats(
 
 async def get_group_with_stats(
     db: AsyncSession, group_id: uuid.UUID, user_id: uuid.UUID
-) -> dict:
+) -> GroupWithStatsResponse:
+    key = CacheKeys.group_detail(str(group_id), str(user_id))
+    cached = await cache.get_str(key)
+    if cached:
+        return GroupWithStatsResponse.model_validate_json(cached)
+
     group = await repository.get_by_id(db, group_id)
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
@@ -114,16 +121,18 @@ async def get_group_with_stats(
     balances = await expenses_public.get_user_balances_for_groups(db, [group_id], user_id)
     raw = balances.get(group_id, Decimal("0"))
     formatted, direction = format_balance(raw, group.currency_code)
-    return {
-        "id": group.id,
-        "name": group.name,
-        "description": group.description,
-        "currency_code": group.currency_code,
-        "member_count": member_count,
-        "balance_formatted": formatted,
-        "balance_direction": direction,
-        "updated_at": group.updated_at,
-    }
+    response = GroupWithStatsResponse(
+        id=group.id,
+        name=group.name,
+        description=group.description,
+        currency_code=group.currency_code,
+        member_count=member_count,
+        balance_formatted=formatted,
+        balance_direction=direction,
+        updated_at=group.updated_at,
+    )
+    await cache.set_str(key, response.model_dump_json(), CacheTTL.GROUP_DETAIL)
+    return response
 
 
 async def get_user_group_ids(db: AsyncSession, user_id: uuid.UUID) -> list[uuid.UUID]:
@@ -156,6 +165,7 @@ async def update_group(
         group.description = description
     await db.flush()
     await db.refresh(group)
+    await cache.invalidate_group_detail(str(group_id))
     return group
 
 
@@ -211,6 +221,8 @@ async def add_member(
     await db.flush()
     if member_status == "pending":
         await _send_invitation_notification(db, group=group, user_id=user_id, invited_by=invited_by)
+    await cache.invalidate_group_detail(str(group_id))
+    await cache.invalidate_group_stats(str(group_id))
     return await repository.get_member_with_user(db, member.id)
 
 
@@ -254,6 +266,8 @@ async def respond_to_invitation(
     if accept:
         member.status = "active"
         await db.flush()
+        await cache.invalidate_group_detail(str(group_id))
+        await cache.invalidate_group_stats(str(group_id))
         return "Gruba katıldınız."
     member.left_at = datetime.now(timezone.utc)
     await db.flush()
@@ -271,8 +285,11 @@ async def get_member(
 
 
 async def remove_member(db: AsyncSession, member: GroupMember) -> None:
+    group_id = str(member.group_id)
     member.left_at = datetime.now(timezone.utc)
     await db.flush()
+    await cache.invalidate_group_detail(group_id)
+    await cache.invalidate_group_stats(group_id)
 
 
 async def update_member_role(
@@ -310,6 +327,8 @@ async def delete_group(db: AsyncSession, group_id: uuid.UUID, user_id: uuid.UUID
     if await expenses_public.has_unsettled_balance(db, group_id):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Grupta açık borçlar var. Önce tüm bakiyeleri kapatın.")
     await soft_delete_group(db, group)
+    await cache.invalidate_group_detail(str(group_id))
+    await cache.invalidate_group_stats(str(group_id))
 
 
 async def leave_group(db: AsyncSession, group_id: uuid.UUID, user_id: uuid.UUID) -> str:
@@ -336,10 +355,14 @@ async def leave_group(db: AsyncSession, group_id: uuid.UUID, user_id: uuid.UUID)
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Gruptan çıkmadan önce başka bir üyeye admin rolü atayın.")
         member.left_at = datetime.now(timezone.utc)
         await soft_delete_group(db, group)
+        await cache.invalidate_group_detail(str(group_id))
+        await cache.invalidate_group_stats(str(group_id))
         return "Son üyesiniz; grup silindi."
 
     member.left_at = datetime.now(timezone.utc)
     await db.flush()
+    await cache.invalidate_group_detail(str(group_id))
+    await cache.invalidate_group_stats(str(group_id))
     return "Gruptan başarıyla çıkıldı."
 
 
@@ -348,11 +371,17 @@ async def get_group_stats(
 ) -> GroupStatsResponse:
     from src.modules.groups import public as groups_public
     await groups_public.require_group_member(db, group_id, user_id)
+
+    key = CacheKeys.group_stats(str(group_id))
+    cached = await cache.get_str(key)
+    if cached:
+        return GroupStatsResponse.model_validate_json(cached)
+
     group = await repository.get_by_id(db, group_id)
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup bulunamadı.")
     stats = await repository.get_group_stats(db, group_id)
-    return GroupStatsResponse(
+    response = GroupStatsResponse(
         total_amount=stats["total_amount"],
         total_expense_count=stats["total_expense_count"],
         currency=group.currency_code,
@@ -378,3 +407,5 @@ async def get_group_stats(
             for r in stats["monthly_trend"]
         ],
     )
+    await cache.set_str(key, response.model_dump_json(), CacheTTL.GROUP_STATS)
+    return response

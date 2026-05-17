@@ -21,6 +21,7 @@ from src.modules.expenses.schemas import (
     UserAmount,
 )
 from fastapi import HTTPException, status
+from src.core.cache import cache, CacheKeys, CacheTTL
 from src.modules.groups import public as groups_public
 from src.services import storage
 
@@ -333,7 +334,7 @@ async def create_expense(
 ) -> Expense:
     await groups_public.require_group_member(db, group_id, current_user_id)
     receipt_url = storage.public_url(storage.temp_path(receipt_key)) if receipt_key else None
-    return await _create_expense(
+    expense = await _create_expense(
         db,
         group_id=group_id,
         paid_by=paid_by,
@@ -347,6 +348,10 @@ async def create_expense(
         receipt_url=receipt_url,
         splits=splits,
     )
+    if group_id:
+        await cache.invalidate_group_detail(str(group_id))
+        await cache.invalidate_group_stats(str(group_id))
+    return expense
 
 
 async def list_group_expenses(
@@ -371,6 +376,23 @@ async def get_expense(
     return expense
 
 
+async def get_expense_detail(
+    db: AsyncSession,
+    expense_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> ExpenseFullDetailResponse:
+    key = CacheKeys.expense_detail(str(expense_id))
+    cached = await cache.get_str(key)
+    if cached:
+        return ExpenseFullDetailResponse.model_validate_json(cached)
+
+    expense = await _get_expense_or_404(db, expense_id)
+    await groups_public.require_group_member(db, expense.group_id, user_id)
+    response = build_expense_full_detail(expense)
+    await cache.set_str(key, response.model_dump_json(), CacheTTL.EXPENSE_DETAIL)
+    return response
+
+
 async def update_expense(
     db: AsyncSession,
     expense_id: uuid.UUID,
@@ -385,7 +407,7 @@ async def update_expense(
 ) -> Expense:
     expense = await _get_expense_or_404(db, expense_id)
     await groups_public.require_group_member(db, expense.group_id, user_id)
-    return await update_as_owner(
+    result = await update_as_owner(
         db, expense, user_id,
         title=title,
         amount=amount,
@@ -394,6 +416,11 @@ async def update_expense(
         expense_date=expense_date,
         category=category,
     )
+    await cache.invalidate_expense_detail(str(expense_id))
+    if expense.group_id:
+        await cache.invalidate_group_detail(str(expense.group_id))
+        await cache.invalidate_group_stats(str(expense.group_id))
+    return result
 
 
 async def delete_expense(
@@ -404,6 +431,10 @@ async def delete_expense(
     expense = await _get_expense_or_404(db, expense_id)
     await groups_public.require_group_member(db, expense.group_id, user_id)
     await delete_as_owner(db, expense, user_id)
+    await cache.invalidate_expense_detail(str(expense_id))
+    if expense.group_id:
+        await cache.invalidate_group_detail(str(expense.group_id))
+        await cache.invalidate_group_stats(str(expense.group_id))
 
 
 async def upload_temp_receipt(content: bytes, content_type: str) -> tuple[str, str]:
@@ -436,6 +467,7 @@ async def upload_receipt_for_expense(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Dosya yüklenemedi: {exc}")
     expense.receipt_url = url
     await db.flush()
+    await cache.invalidate_expense_detail(str(expense_id))
     return url
 
 
@@ -451,6 +483,7 @@ async def delete_receipt_for_expense(
     await storage.delete_receipt(str(expense_id))
     expense.receipt_url = None
     await db.flush()
+    await cache.invalidate_expense_detail(str(expense_id))
 
 
 async def pay_split_for_user(
@@ -466,7 +499,13 @@ async def pay_split_for_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Split kaydı bulunamadı.")
     if split.user_id != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca kendi borcunuzu ödeyebilirsiniz.")
-    return await pay_split(db, split, paid_amount=paid_amount)
+    expense = await get_expense_by_id(db, expense_id)
+    result = await pay_split(db, split, paid_amount=paid_amount)
+    await cache.invalidate_expense_detail(str(expense_id))
+    if expense and expense.group_id:
+        await cache.invalidate_group_detail(str(expense.group_id))
+        await cache.invalidate_group_stats(str(expense.group_id))
+    return result
 
 
 def build_expense_with_my_split(exp: Expense, user_id: uuid.UUID) -> ExpenseWithMySplitResponse:

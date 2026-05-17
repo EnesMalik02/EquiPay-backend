@@ -125,8 +125,7 @@ async def get_expense(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    exp = await services.get_expense(db, expense_id, current_user.id)
-    return services.build_expense_full_detail(exp)
+    return await services.get_expense_detail(db, expense_id, current_user.id)
 
 
 @router.patch(
