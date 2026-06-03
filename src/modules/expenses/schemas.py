@@ -150,9 +150,15 @@ class SplitDetailItem(ORMSchema):
     status: str  # "paid" | "pending"
 
 
+class TempReceiptUploadResponse(BaseModel):
+    """Returned from the pre-creation temp upload endpoint. The key is opaque
+    to the client and must be passed back via `ExpenseCreate.receipt_key`."""
+    receipt_key: str
+
+
 class ReceiptUploadResponse(BaseModel):
+    """Returned after binding a receipt to an existing expense."""
     receipt_url: str
-    receipt_key: str | None = None
 
 
 class ExpenseFullDetailResponse(ORMSchema):

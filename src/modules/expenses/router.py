@@ -13,6 +13,7 @@ from src.modules.expenses.schemas import (
     ExpenseWithMySplitResponse,
     ExpenseFullDetailResponse,
     ReceiptUploadResponse,
+    TempReceiptUploadResponse,
     ExpenseSplitPayRequest,
     ExpenseSplitResponse,
 )
@@ -24,7 +25,7 @@ router = APIRouter(prefix="/expenses", tags=["Expenses"])
 
 @router.post(
     "/receipt/upload-temp",
-    response_model=ReceiptUploadResponse,
+    response_model=TempReceiptUploadResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Expense oluşturmadan önce fiş yükle (geçici)",
     dependencies=[Depends(rate_limit("20/minute"))],
@@ -34,8 +35,8 @@ async def upload_temp_receipt(
     current_user: User = Depends(get_current_user),
 ):
     content = await file.read()
-    key, url = await services.upload_temp_receipt(content, file.content_type or "")
-    return ReceiptUploadResponse(receipt_url=url, receipt_key=key)
+    key = await services.upload_temp_receipt(content, file.content_type or "")
+    return TempReceiptUploadResponse(receipt_key=key)
 
 
 @router.post(
@@ -178,10 +179,10 @@ async def upload_receipt(
     db: AsyncSession = Depends(get_db),
 ):
     content = await file.read()
-    url = await services.upload_receipt_for_expense(
+    expense = await services.replace_expense_receipt(
         db, expense_id, current_user.id, content, file.content_type or ""
     )
-    return ReceiptUploadResponse(receipt_url=url)
+    return ReceiptUploadResponse(receipt_url=expense.receipt_url)
 
 
 @router.delete(
@@ -195,7 +196,7 @@ async def delete_receipt(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await services.delete_receipt_for_expense(db, expense_id, current_user.id)
+    await services.remove_expense_receipt(db, expense_id, current_user.id)
 
 
 @router.patch(

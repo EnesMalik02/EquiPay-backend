@@ -1,4 +1,19 @@
+"""Object storage facade for receipt files backed by Supabase Storage.
+
+Design:
+    - The DB persists an opaque **object key** (path within the bucket), never a URL.
+      URLs are a presentation concern and are projected on read via `public_url`.
+    - Each upload mints a fresh key (uuid-suffixed) so cached CDN/URL responses
+      never mask a freshly uploaded file. Callers delete the previous key
+      *after* persisting the new one to avoid orphaning valid data on flush failure.
+    - Callers do not assemble paths; they go through `new_temp_key` /
+      `new_receipt_key`. The on-disk layout stays a storage-module concern.
+"""
+
+from __future__ import annotations
+
 import io
+import uuid
 
 import httpx
 from PIL import Image
@@ -6,45 +21,52 @@ from PIL import Image
 from src.config import settings
 
 ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"}
-MAX_SIZE = 10 * 1024 * 1024  # 10MB
-MAX_DIMENSION = 2048          # px — longest side
-WEBP_QUALITY = 82             # good balance size/quality
+MAX_SIZE_BYTES = 10 * 1024 * 1024
+MAX_IMAGE_DIMENSION = 2048
+WEBP_QUALITY = 82
+
+_UPLOAD_TIMEOUT_S = 30.0
+_DELETE_TIMEOUT_S = 15.0
 
 
-def _object_url(path: str) -> str:
-    return f"{settings.SUPABASE_URL}/storage/v1/object/{settings.SUPABASE_RECEIPT_BUCKET}/{path}"
+class StorageValidationError(ValueError):
+    """Caller-supplied content is unacceptable (unsupported type, too large)."""
 
 
-def public_url(path: str) -> str:
-    return f"{settings.SUPABASE_URL}/storage/v1/object/public/{settings.SUPABASE_RECEIPT_BUCKET}/{path}"
+# ── Key construction ──────────────────────────────────────────────────────
+
+def new_temp_key(ext: str) -> str:
+    return f"uploads/{uuid.uuid4()}.{ext}"
 
 
-def _auth_headers() -> dict[str, str]:
-    return {"Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}"}
+def new_receipt_key(expense_id: str, ext: str) -> str:
+    return f"expenses/{expense_id}/{uuid.uuid4()}.{ext}"
 
 
-def receipt_path(expense_id: str) -> str:
-    return f"expenses/{expense_id}"
+# ── URL projection ────────────────────────────────────────────────────────
+
+def public_url(key: str | None) -> str | None:
+    if not key:
+        return None
+    return (
+        f"{settings.SUPABASE_URL}/storage/v1/object/public/"
+        f"{settings.SUPABASE_RECEIPT_BUCKET}/{key}"
+    )
 
 
-def temp_path(key: str) -> str:
-    return f"uploads/{key}"
-
+# ── Content normalization ─────────────────────────────────────────────────
 
 def _to_webp(content: bytes) -> bytes:
-    """Convert image bytes to WebP. Resizes if longest side > MAX_DIMENSION."""
     img = Image.open(io.BytesIO(content))
 
-    # Preserve transparency via RGBA; otherwise RGB
     if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
         img = img.convert("RGBA")
     else:
         img = img.convert("RGB")
 
-    # Downscale if too large
     w, h = img.size
-    if max(w, h) > MAX_DIMENSION:
-        scale = MAX_DIMENSION / max(w, h)
+    if max(w, h) > MAX_IMAGE_DIMENSION:
+        scale = MAX_IMAGE_DIMENSION / max(w, h)
         img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
 
     buf = io.BytesIO()
@@ -52,64 +74,76 @@ def _to_webp(content: bytes) -> bytes:
     return buf.getvalue()
 
 
-async def _upload(path: str, content: bytes, content_type: str) -> str:
-    """Raw upload to any path. Returns public URL."""
+def _normalize(content: bytes, content_type: str) -> tuple[bytes, str, str]:
+    """Validate and (for images) re-encode as WebP. Returns (bytes, content_type, ext)."""
+    if content_type not in ALLOWED_MIME:
+        raise StorageValidationError(f"Desteklenmeyen dosya türü: {content_type}")
+    if len(content) > MAX_SIZE_BYTES:
+        raise StorageValidationError("Dosya boyutu 10MB'ı aşamaz.")
+    if content_type == "application/pdf":
+        return content, content_type, "pdf"
+    return _to_webp(content), "image/webp", "webp"
+
+
+# ── Raw object I/O ────────────────────────────────────────────────────────
+
+def _object_url(key: str) -> str:
+    return (
+        f"{settings.SUPABASE_URL}/storage/v1/object/"
+        f"{settings.SUPABASE_RECEIPT_BUCKET}/{key}"
+    )
+
+
+def _auth_headers() -> dict[str, str]:
+    return {"Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}"}
+
+
+async def _put_object(key: str, content: bytes, content_type: str) -> None:
     async with httpx.AsyncClient() as client:
         resp = await client.put(
-            _object_url(path),
+            _object_url(key),
             content=content,
             headers={
                 **_auth_headers(),
                 "Content-Type": content_type,
                 "x-upsert": "true",
             },
-            timeout=30.0,
+            timeout=_UPLOAD_TIMEOUT_S,
         )
         resp.raise_for_status()
-    return public_url(path)
 
 
-def _prepare(content: bytes, content_type: str) -> tuple[bytes, str]:
-    """Validate and convert image to WebP. Returns (content, content_type)."""
-    if content_type not in ALLOWED_MIME:
-        raise ValueError(f"Desteklenmeyen dosya türü: {content_type}")
-    if len(content) > MAX_SIZE:
-        raise ValueError("Dosya boyutu 10MB'ı aşamaz.")
-    if content_type != "application/pdf":
-        content = _to_webp(content)
-        content_type = "image/webp"
-    return content, content_type
-
-
-async def upload_temp(content: bytes, content_type: str) -> tuple[str, str]:
-    """
-    Upload to a temporary path. Returns (receipt_key, public_url).
-    Used before expense creation so the expense ID is not needed yet.
-    """
-    import uuid as _uuid
-    content, content_type = _prepare(content, content_type)
-    key = str(_uuid.uuid4())
-    url = await _upload(temp_path(key), content, content_type)
-    return key, url
-
-
-async def upload_receipt(expense_id: str, content: bytes, content_type: str) -> str:
-    """
-    Upload receipt to Supabase Storage. Returns public URL. Overwrites if exists.
-    Images are converted to WebP before upload. PDFs pass through unchanged.
-    """
-    content, content_type = _prepare(content, content_type)
-    return await _upload(receipt_path(expense_id), content, content_type)
-
-
-async def delete_receipt(expense_id: str) -> None:
-    """Delete receipt from Supabase Storage. Ignores 404."""
-    path = receipt_path(expense_id)
+async def delete_object(key: str | None) -> None:
+    """Idempotent: no-op when key is None; ignores 404 from upstream."""
+    if not key:
+        return
     async with httpx.AsyncClient() as client:
         resp = await client.delete(
-            _object_url(path),
+            _object_url(key),
             headers=_auth_headers(),
-            timeout=15.0,
+            timeout=_DELETE_TIMEOUT_S,
         )
         if resp.status_code not in (200, 204, 404):
             resp.raise_for_status()
+
+
+# ── High-level use cases ──────────────────────────────────────────────────
+
+async def upload_temp_receipt(content: bytes, content_type: str) -> str:
+    """Upload an unbound receipt (no expense yet). Returns the new object key."""
+    content, content_type, ext = _normalize(content, content_type)
+    key = new_temp_key(ext)
+    await _put_object(key, content, content_type)
+    return key
+
+
+async def upload_expense_receipt(expense_id: str, content: bytes, content_type: str) -> str:
+    """Upload a receipt bound to an expense. Returns the new object key.
+
+    Each call produces a unique key; the caller deletes the previous key
+    via `delete_object` after the new key has been persisted.
+    """
+    content, content_type, ext = _normalize(content, content_type)
+    key = new_receipt_key(expense_id, ext)
+    await _put_object(key, content, content_type)
+    return key

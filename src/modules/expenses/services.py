@@ -40,7 +40,7 @@ async def _create_expense(
     expense_date=None,
     split_type: str = "equal",
     category: str | None = None,
-    receipt_url: str | None = None,
+    receipt_key: str | None = None,
     splits: list[ExpenseSplitInput],
 ) -> Expense:
     split_total = sum(s.owed_amount for s in splits)
@@ -57,7 +57,7 @@ async def _create_expense(
         expense_date=expense_date,
         split_type=split_type,
         category=category,
-        receipt_url=receipt_url,
+        receipt_key=receipt_key,
     )
     db.add(expense)
     await db.flush()
@@ -333,7 +333,6 @@ async def create_expense(
     current_user_id: uuid.UUID,
 ) -> Expense:
     await groups_public.require_group_member(db, group_id, current_user_id)
-    receipt_url = storage.public_url(storage.temp_path(receipt_key)) if receipt_key else None
     expense = await _create_expense(
         db,
         group_id=group_id,
@@ -345,7 +344,7 @@ async def create_expense(
         expense_date=expense_date,
         split_type=split_type,
         category=category,
-        receipt_url=receipt_url,
+        receipt_key=receipt_key,
         splits=splits,
     )
     if group_id:
@@ -437,52 +436,73 @@ async def delete_expense(
         await cache.invalidate_group_stats(str(expense.group_id))
 
 
-async def upload_temp_receipt(content: bytes, content_type: str) -> tuple[str, str]:
+async def upload_temp_receipt(content: bytes, content_type: str) -> str:
+    """Upload an unbound receipt and return its opaque object key."""
     try:
-        return await storage.upload_temp(content, content_type)
-    except ValueError as exc:
+        return await storage.upload_temp_receipt(content, content_type)
+    except storage.StorageValidationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except Exception as exc:
         logger.exception("Temp receipt upload failed")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Dosya yüklenemedi: {exc}")
 
 
-async def upload_receipt_for_expense(
+async def _authorize_receipt_owner(
+    db: AsyncSession,
+    expense_id: uuid.UUID,
+    user_id: uuid.UUID,
+    forbidden_detail: str,
+) -> Expense:
+    expense = await _get_expense_or_404(db, expense_id)
+    await groups_public.require_group_member(db, expense.group_id, user_id)
+    if expense.paid_by != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=forbidden_detail)
+    return expense
+
+
+async def replace_expense_receipt(
     db: AsyncSession,
     expense_id: uuid.UUID,
     user_id: uuid.UUID,
     content: bytes,
     content_type: str,
-) -> str:
-    expense = await _get_expense_or_404(db, expense_id)
-    await groups_public.require_group_member(db, expense.group_id, user_id)
-    if expense.paid_by != user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca masrafı oluşturan fiş yükleyebilir.")
+) -> Expense:
+    """Upload a new receipt, persist it, then best-effort delete the previous object."""
+    expense = await _authorize_receipt_owner(
+        db, expense_id, user_id, "Yalnızca masrafı oluşturan fiş yükleyebilir."
+    )
+    previous_key = expense.receipt_key
     try:
-        url = await storage.upload_receipt(str(expense_id), content, content_type)
-    except ValueError as exc:
+        new_key = await storage.upload_expense_receipt(str(expense_id), content, content_type)
+    except storage.StorageValidationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except Exception as exc:
         logger.exception("Receipt upload failed for expense %s", expense_id)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Dosya yüklenemedi: {exc}")
-    expense.receipt_url = url
+
+    expense.receipt_key = new_key
     await db.flush()
+    if previous_key and previous_key != new_key:
+        try:
+            await storage.delete_object(previous_key)
+        except Exception:
+            logger.exception("Orphaned previous receipt object for expense %s: %s", expense_id, previous_key)
     await cache.invalidate_expense_detail(str(expense_id))
-    return url
+    return expense
 
 
-async def delete_receipt_for_expense(
+async def remove_expense_receipt(
     db: AsyncSession,
     expense_id: uuid.UUID,
     user_id: uuid.UUID,
 ) -> None:
-    expense = await _get_expense_or_404(db, expense_id)
-    await groups_public.require_group_member(db, expense.group_id, user_id)
-    if expense.paid_by != user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yalnızca masrafı oluşturan fişi silebilir.")
-    await storage.delete_receipt(str(expense_id))
-    expense.receipt_url = None
+    expense = await _authorize_receipt_owner(
+        db, expense_id, user_id, "Yalnızca masrafı oluşturan fişi silebilir."
+    )
+    key_to_delete = expense.receipt_key
+    expense.receipt_key = None
     await db.flush()
+    await storage.delete_object(key_to_delete)
     await cache.invalidate_expense_detail(str(expense_id))
 
 

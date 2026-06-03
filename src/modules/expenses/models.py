@@ -18,6 +18,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
+from src.services import storage
 
 
 class Expense(Base):
@@ -59,7 +60,7 @@ class Expense(Base):
     category: Mapped[Optional[str]] = mapped_column(
         String(20), nullable=True
     )
-    receipt_url: Mapped[Optional[str]] = mapped_column(
+    receipt_key: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True
     )
     deleted_at: Mapped[Optional[datetime]] = mapped_column(
@@ -81,6 +82,11 @@ class Expense(Base):
         if not self.splits:
             return False
         return all(s.paid_amount >= s.owed_amount for s in self.splits)
+
+    @property
+    def receipt_url(self) -> Optional[str]:
+        """Public CDN URL projected from the stored object key."""
+        return storage.public_url(self.receipt_key)
 
 
 class ExpenseSplit(Base):
