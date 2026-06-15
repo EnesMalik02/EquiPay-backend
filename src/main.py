@@ -40,6 +40,6 @@ app.include_router(settlements_router, prefix="/api")
 app.include_router(notifications_router, prefix="/api")
 
 
-@app.get("/", summary="Health check")
+@app.get("/health", summary="Health check")
 async def health_check():
     return {"status": "ok", "message": "EquiPay API is running."}
