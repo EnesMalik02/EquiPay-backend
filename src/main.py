@@ -1,4 +1,16 @@
-ents_router
+from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+
+from src.config import settings
+from src.core.exceptions import AppError, app_error_handler, http_exception_handler, validation_error_handler
+from src.core.lifespan import lifespan
+from src.core.middleware import RequestContextMiddleware
+from src.modules.auth.router import router as auth_router
+from src.modules.users.router import router as users_router
+from src.modules.groups.router import router as groups_router
+from src.modules.expenses.router import router as expenses_router
+from src.modules.settlements.router import router as settlements_router
 from src.modules.notifications.router import router as notifications_router
 
 app = FastAPI(
